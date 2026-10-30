@@ -1,0 +1,27 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: order-pos-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/db_order?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
+# Cấu hình Feign Client trỏ sang Lab Service và Catalog Service
+services:
+  catalog-service:
+    url: http://localhost:8082
+  eyewear-lab-service:
+    url: http://localhost:8084
+
