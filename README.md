@@ -93,14 +93,41 @@ Tất cả các truy vấn từ bên ngoài (Frontend Web/Mobile) **chỉ đi qu
 ```bash
 docker compose up -d
 ```
-Container MySQL 8.0 sẽ tự động bật trên cổng `3306` và tự động thực thi script tạo sẵn 4 database (`db_identity`, `db_catalog`, `db_order`, `db_lab`).
+Container MySQL 8.0 sẽ tự động bật trên cổng `3306` và tự động thực thi tuần tự 2 script:
+1. `01-init-databases.sql`: Tạo 4 database schema (`db_identity`, `db_catalog`, `db_order`, `db_lab`).
+2. `02-seed-data.sql`: Tạo toàn bộ cấu trúc bảng và nạp sẵn dữ liệu mẫu thực tế.
 
-### Bước 2: Build mã nguồn bằng Maven
+> **Mẹo:** Nếu muốn xóa sạch dữ liệu để nạp lại từ đầu:
+> ```bash
+> docker compose down -v && docker compose up -d
+> ```
+
+### Bước 2: Danh sách tài khoản mẫu & Dữ liệu Seed sẵn
+
+**Tất cả tài khoản đều có mật khẩu mặc định là:** `123456`
+
+| Email đăng nhập | Tên người dùng | Vai trò (Role) | Chức năng kiểm thử |
+| :--- | :--- | :--- | :--- |
+| `admin@glassstore.com` | Quản Trị Viên | `ROLE_ADMIN` | Quản trị toàn hệ thống, cấu hình |
+| `staff@glassstore.com` | Nguyễn Bán Hàng | `ROLE_SALES_STAFF` | Bán hàng trực tiếp tại quầy POS |
+| `optometrist@glassstore.com` | Bác Sĩ Trần Đo Mắt | `ROLE_OPTOMETRIST` | Nhập kết quả đo khúc xạ OD/OS |
+| `lab@glassstore.com` | Lê Kỹ Thuật Xưởng Mài | `ROLE_LAB_TECH` | Đổi trạng thái mài kính & kiểm định QC |
+| `customer@gmail.com` | Phạm Khách Hàng | `ROLE_CUSTOMER` | Đăng nhập mua kính online trên Web |
+
+**Dữ liệu sản phẩm mẫu có sẵn (50 chiếc tồn kho mỗi loại):**
+- Gọng kính Titanium Bolon (`FRM-BOLON-BLK`, `FRM-BOLON-SIL`)
+- Gọng nhựa TR90 Gentle Monster (`FRM-GM-BLK`, `FRM-GM-TOR`)
+- Gọng phi công Ray-Ban Aviator (`FRM-RB-GLD`)
+- Tròng kính Chemi U2 BlueCut 1.60 (`LNS-CHEMI-160`) & Tròng đổi màu Essilor (`LNS-ESS-TRANS`)
+- Kính râm Ray-Ban Wayfarer Polarized (`SUN-RB-WAYF-BLK`)
+- Phụ kiện Hộp da + Khăn lau Nano (`ACC-BOX-NANO`)
+
+### Bước 3: Build mã nguồn bằng Maven
 ```bash
 mvn clean compile
 ```
 
-### Bước 3: Thứ tự khởi chạy các dịch vụ (Services)
+### Bước 4: Thứ tự khởi chạy các dịch vụ (Services)
 Khởi chạy lần lượt từng Application (qua IntelliJ IDEA hoặc lệnh `mvn spring-boot:run`):
 1. **`api-gateway`** (`GatewayApplication.java`) - Port 8080
 2. **`identity-service`** (`IdentityApplication.java`) - Port 8081
