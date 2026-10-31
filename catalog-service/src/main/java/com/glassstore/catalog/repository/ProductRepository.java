@@ -16,3 +16,4 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     List<Product> findByProductType(ProductType productType);
     List<Product> findByStatus(String status);
 }
+

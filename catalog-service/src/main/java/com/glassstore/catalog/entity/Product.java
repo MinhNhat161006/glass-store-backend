@@ -59,3 +59,4 @@ public class Product {
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
 }
+

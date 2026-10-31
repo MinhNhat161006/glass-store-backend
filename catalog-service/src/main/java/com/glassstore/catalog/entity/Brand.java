@@ -25,3 +25,4 @@ public class Brand {
     @Column(length = 255)
     private String description;
 }
+

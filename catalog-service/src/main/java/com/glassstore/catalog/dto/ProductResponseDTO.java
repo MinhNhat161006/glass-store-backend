@@ -22,3 +22,4 @@ public class ProductResponseDTO {
     private String status;
     private List<ProductVariantDTO> variants;
 }
+

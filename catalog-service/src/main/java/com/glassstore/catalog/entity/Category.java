@@ -31,3 +31,4 @@ public class Category {
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 }
+

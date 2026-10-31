@@ -6,3 +6,4 @@ public enum ProductType {
     SUNGLASSES,
     ACCESSORY
 }
+

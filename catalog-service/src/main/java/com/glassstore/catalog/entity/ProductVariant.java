@@ -71,3 +71,4 @@ public class ProductVariant {
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
 }
+

@@ -22,3 +22,4 @@ public class ProductVariantDTO {
     private String imageUrl;
     private String status;
 }
+

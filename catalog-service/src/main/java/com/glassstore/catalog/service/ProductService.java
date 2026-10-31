@@ -10,3 +10,4 @@ public interface ProductService {
     ProductResponseDTO getProductById(Long id);
     ProductResponseDTO getProductBySlug(String slug);
 }
+

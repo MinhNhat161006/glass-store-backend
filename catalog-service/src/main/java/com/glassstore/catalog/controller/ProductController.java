@@ -39,3 +39,4 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success("Lấy chi tiết sản phẩm thành công", product));
     }
 }
+
