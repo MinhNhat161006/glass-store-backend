@@ -277,3 +277,4 @@ ON DUPLICATE KEY UPDATE `subtotal` = VALUES(`subtotal`);
 INSERT INTO `payments` (`id`, `order_id`, `payment_method`, `transaction_code`, `amount`, `status`) VALUES
 (1, 1001, 'VIETQR', 'VQR-MBB-987123', 3900000, 'SUCCESS')
 ON DUPLICATE KEY UPDATE `amount` = VALUES(`amount`);
+
