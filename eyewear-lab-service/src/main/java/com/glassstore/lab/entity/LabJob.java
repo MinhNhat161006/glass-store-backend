@@ -58,3 +58,4 @@ public class LabJob {
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
 }
+

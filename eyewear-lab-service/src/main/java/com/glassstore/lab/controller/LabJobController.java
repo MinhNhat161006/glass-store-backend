@@ -52,3 +52,4 @@ public class LabJobController {
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái gia công QC thành công", updated));
     }
 }
+

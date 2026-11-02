@@ -5,10 +5,10 @@ spring:
   application:
     name: order-pos-service
   datasource:
-    url: jdbc:mysql://localhost:3307/db_order?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh
-    username: root
-    password: root
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:h2:mem:db_order;DB_CLOSE_DELAY=-1;MODE=MySQL;DATABASE_TO_UPPER=false
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
   jpa:
     hibernate:
       ddl-auto: update
@@ -16,7 +16,6 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        dialect: org.hibernate.dialect.MySQLDialect
 
 # Cấu hình Feign Client trỏ sang Lab Service và Catalog Service
 services:
@@ -24,4 +23,3 @@ services:
     url: http://localhost:8082
   eyewear-lab-service:
     url: http://localhost:8084
-

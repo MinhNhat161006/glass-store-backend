@@ -41,7 +41,7 @@ spring:
         - id: eyewear-lab-service
           uri: http://localhost:8084
           predicates:
-            - Path=/api/prescriptions/**, /api/lab-jobs/**, /api/eye-exams/**
+            - Path=/api/prescriptions/**, /api/lab-jobs/**, /api/eye-exams/**, /api/warranties/**, /api/appointments/**
 
 logging:
   level:

@@ -11,3 +11,4 @@ public interface LabJobRepository extends JpaRepository<LabJob, Long> {
     List<LabJob> findByStatusOrderByCreatedAtDesc(String status);
     List<LabJob> findAllByOrderByCreatedAtDesc();
 }
+
