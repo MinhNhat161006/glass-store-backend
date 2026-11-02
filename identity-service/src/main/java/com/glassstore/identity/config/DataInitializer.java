@@ -37,7 +37,7 @@ public class DataInitializer implements CommandLineRunner {
         Role labRole = roleRepository.save(Role.builder().name("ROLE_LAB_TECH").description("Kỹ thuật viên xưởng gia công mài lắp kính").build());
         Role customerRole = roleRepository.save(Role.builder().name("ROLE_CUSTOMER").description("Khách hàng mua sắm đa kênh").build());
 
-        String defaultPassHash = passwordEncoder.encode("123456");
+        String defaultPassHash = passwordEncoder.encode("Password2026@");
 
         // 2. Staff members
         userRepository.save(User.builder()
@@ -148,6 +148,55 @@ public class DataInitializer implements CommandLineRunner {
                 .roles(new HashSet<>(Collections.singletonList(labRole)))
                 .build());
 
+        // Internal Portal Quick Profiles
+        userRepository.save(User.builder()
+                .username("nv_pos_202688")
+                .email("pos.banhang@optivision.vn")
+                .passwordHash(defaultPassHash)
+                .fullName("Nguyễn Bán Hàng (Thu Ngân)")
+                .phoneNumber("0903222333")
+                .employeeCode("NV-OPT-202688")
+                .branchName("Chi nhánh 01 - Flagship Lê Thánh Tôn, Quận 1, TP.HCM")
+                .status("ACTIVE")
+                .roles(new HashSet<>(Collections.singletonList(staffRole)))
+                .build());
+
+        userRepository.save(User.builder()
+                .username("ktv_opt_104592")
+                .email("bs.tuyet@optivision.vn")
+                .passwordHash(defaultPassHash)
+                .fullName("BS. Lê Thị Ánh Tuyết (Khúc Xạ)")
+                .phoneNumber("0903444555")
+                .employeeCode("KTV-OPT-104592")
+                .branchName("Chi nhánh 01 - Flagship Lê Thánh Tôn, Quận 1, TP.HCM")
+                .status("ACTIVE")
+                .roles(new HashSet<>(Collections.singletonList(optomRole)))
+                .build());
+
+        userRepository.save(User.builder()
+                .username("lab_opt_308115")
+                .email("ktv.lab@optivision.vn")
+                .passwordHash(defaultPassHash)
+                .fullName("Trần Văn Kỹ Thuật (Lab Lens)")
+                .phoneNumber("0903666777")
+                .employeeCode("LAB-OPT-308115")
+                .branchName("Trung tâm Gia công & Lab Lens Tân Bình, TP.HCM")
+                .status("ACTIVE")
+                .roles(new HashSet<>(Collections.singletonList(labRole)))
+                .build());
+
+        userRepository.save(User.builder()
+                .username("adm_opt_001099")
+                .email("admin.portal@optivision.vn")
+                .passwordHash(defaultPassHash)
+                .fullName("Phạm Quản Trị Hệ Thống")
+                .phoneNumber("0903999888")
+                .employeeCode("ADM-OPT-001099")
+                .branchName("Trụ sở Quản trị Toàn quốc (OptiVision Head Office)")
+                .status("ACTIVE")
+                .roles(new HashSet<>(Collections.singletonList(adminRole)))
+                .build());
+
         // 3. Customers
         userRepository.save(User.builder()
                 .username("cus_duy")
@@ -189,26 +238,14 @@ public class DataInitializer implements CommandLineRunner {
                 .username("cus_ngoc")
                 .email("bichngoc.pham@gmail.com")
                 .passwordHash(defaultPassHash)
-                .fullName("Phạm Thị Bích Ngọc")
-                .phoneNumber("0977898332")
-                .employeeCode("VIP-03")
-                .branchName("15 Mai Lão Bạng, P.13, Tân Bình, TP.HCM")
-                .status("ACTIVE")
-                .roles(new HashSet<>(Collections.singletonList(customerRole)))
-                .build());
-
-        userRepository.save(User.builder()
-                .username("cus_kiet")
-                .email("kiet.do@gmail.com")
-                .passwordHash(defaultPassHash)
-                .fullName("Đỗ Tuấn Kiệt")
-                .phoneNumber("0938552191")
+                .fullName("Phạm Bích Ngọc")
+                .phoneNumber("0933778811")
                 .employeeCode("MEM-04")
-                .branchName("52 Đường số 7, KDC An Phú, TP. Thủ Đức")
+                .branchName("204 Pasteur, P. Võ Thị Sáu, Q.3, TP.HCM")
                 .status("ACTIVE")
                 .roles(new HashSet<>(Collections.singletonList(customerRole)))
                 .build());
 
-        log.info("Đã nạp thành công {} nhân sự và khách hàng vào hệ thống!", userRepository.count());
+        log.info("Nạp seed data db_identity hoàn tất thành công!");
     }
 }
