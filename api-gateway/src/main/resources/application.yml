@@ -6,7 +6,10 @@ spring:
     name: api-gateway
   cloud:
     gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
       globalcors:
+        add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
             allowedOrigins: "*"
@@ -46,4 +49,3 @@ spring:
 logging:
   level:
     org.springframework.cloud.gateway: INFO
-
