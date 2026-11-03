@@ -46,7 +46,11 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserDTO createStaff(CreateStaffRequest request) {
-        String baseEmail = request.getEmail() != null ? request.getEmail() : "user" + (new Random().nextInt(900) + 100) + "@optivision.vn";
+        if (request.getEmail() != null && userRepository.findByEmail(request.getEmail().trim()).isPresent()) {
+            throw new RuntimeException("Email '" + request.getEmail().trim() + "' đã được đăng ký trong hệ thống!");
+        }
+
+        String baseEmail = request.getEmail() != null ? request.getEmail().trim() : "user" + (new Random().nextInt(900) + 100) + "@optivision.vn";
         String username = baseEmail.split("@")[0].toLowerCase().replaceAll("[^a-z0-9]", "");
         if (userRepository.findByUsername(username).isPresent()) {
             username += "_" + (new Random().nextInt(900) + 100);
