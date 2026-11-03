@@ -10,7 +10,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>GlassStore :: Backend Monorepo</name>
-    <description>Omnichannel Eyewear Retail Management System</description>
+    <description>Omnichannel Eyewear Retail &amp; Eyecare Management Microservices</description>
 
     <modules>
         <module>common-lib</module>
@@ -27,7 +27,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         
-        <!-- Versions cập nhật theo Java 21 & Spring Boot mới nhất -->
+        <!-- Versions -->
         <spring-boot.version>3.4.3</spring-boot.version>
         <spring-cloud.version>2024.0.0</spring-cloud.version>
         <lombok.version>1.18.36</lombok.version>
@@ -91,8 +91,8 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.11.0</version>
                     <configuration>
-                        <source>${java.version}</source>
-                        <target>${java.version}</target>
+                        <source>21</source>
+                        <target>21</target>
                         <annotationProcessorPaths>
                             <path>
                                 <groupId>org.projectlombok</groupId>
@@ -106,9 +106,15 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
             </plugins>
         </pluginManagement>
     </build>
 </project>
-
