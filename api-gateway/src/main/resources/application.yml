@@ -32,7 +32,7 @@ spring:
         - id: catalog-service
           uri: http://localhost:8082
           predicates:
-            - Path=/api/catalog/**, /api/products/**, /api/categories/**, /api/inventory/**
+            - Path=/api/catalog/**, /api/products/**, /api/categories/**, /api/inventory, /api/inventory/**
 
         # Route 3: order-pos-service (Port 8083)
         - id: order-pos-service
