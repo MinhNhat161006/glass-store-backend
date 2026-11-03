@@ -5,6 +5,7 @@ import com.glassstore.order.entity.OrderItem;
 import com.glassstore.order.entity.Payment;
 import com.glassstore.order.repository.OrderRepository;
 import com.glassstore.order.repository.PaymentRepository;
+import com.glassstore.order.service.StockDeductionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +30,7 @@ public class OrderController {
 
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
+    private final StockDeductionService stockDeductionService;
 
     @GetMapping
     public ResponseEntity<List<Order>> getAllOrders() {
@@ -51,7 +53,21 @@ public class OrderController {
 
     @PostMapping
     @Transactional
-    public ResponseEntity<Order> createOrder(@RequestBody Order order) {
+    public ResponseEntity<Order> createOrder(
+            @RequestBody Order order,
+            @RequestHeader(name = "Idempotency-Key", required = false) String requestIdempotencyKey) {
+        if (requestIdempotencyKey != null) {
+            if (requestIdempotencyKey.isBlank() || requestIdempotencyKey.length() > 100) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Idempotency-Key không hợp lệ.");
+            }
+            Payment existingPayment = paymentRepository.findByIdempotencyKey(requestIdempotencyKey).orElse(null);
+            if (existingPayment != null) {
+                Order existingOrder = orderRepository.findById(existingPayment.getOrderId())
+                        .orElseThrow(() -> new IllegalStateException("Payment exists without its order."));
+                existingOrder.setInventorySyncStatus(stockDeductionService.statusForOrder(existingOrder.getId()));
+                return ResponseEntity.ok(existingOrder);
+            }
+        }
         if (order.getId() != null || order.getItems() == null || order.getItems().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn hàng phải có sản phẩm và không được có ID sẵn.");
         }
@@ -110,11 +126,17 @@ public class OrderController {
                 .orderId(saved.getId())
                 .paymentMethod(saved.getPaymentMethod() != null ? saved.getPaymentMethod() : "VIETQR")
                 .amount(saved.getFinalAmount() != null ? saved.getFinalAmount() : BigDecimal.ZERO)
-                .transactionCode("TXN-" + System.currentTimeMillis())
+                .transactionCode("TXN-" + UUID.randomUUID().toString().toUpperCase())
+                .idempotencyKey(requestIdempotencyKey != null
+                        ? requestIdempotencyKey
+                        : UUID.randomUUID().toString())
                 .status("SUCCESS")
                 .paidAt(LocalDateTime.now())
                 .build();
         paymentRepository.save(payment);
+        if ("POS".equalsIgnoreCase(saved.getChannel()) && "SUCCESS".equalsIgnoreCase(payment.getStatus())) {
+            stockDeductionService.enqueue(saved, payment);
+        }
 
         log.info("Tạo đơn hàng POS thành công: Mã {}", saved.getOrderCode());
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);

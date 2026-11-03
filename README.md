@@ -151,7 +151,7 @@ Tất cả các REST Controller trả về theo format `ApiResponse<T>`:
 ```
 
 ### 6.2. Giao tiếp OpenFeign giữa các Service
-- `order-pos-service` gọi sang `catalog-service` để kiểm tra và trừ tồn kho khả dụng khi tạo đơn hàng.
+- Khi POS thanh toán thành công, `order-pos-service` ghi một sự kiện trừ kho vào outbox cùng giao dịch đơn hàng/thanh toán, sau đó gọi `catalog-service` qua OpenFeign. Sự kiện lỗi mạng được giữ lại và tự thử lại; idempotency key và mã đơn ngăn trừ lặp.
 - Khi đơn hàng kính thuốc được thanh toán thành công, `order-pos-service` gọi sang `eyewear-lab-service` qua OpenFeign (`POST /api/lab-jobs`) để khởi tạo lệnh gia công mài lắp kính cho xưởng Lab.
 
 ---
@@ -175,7 +175,34 @@ Base URL Gateway: `http://localhost:8080`
 
 ---
 
-## 8. Quy tắc Git & Phân nhánh (Git Workflow)
+## 9. Quản lý tồn kho GS-23
+
+`catalog-service` quản lý tồn vật lý theo SKU tại `BRANCH_01`, `BRANCH_02` và `LAB`. Khi khởi động, schema được Hibernate cập nhật theo entity hiện có; các SKU cũ chưa có số liệu theo địa điểm được chuyển nguyên số lượng `stock_quantity` sang `LAB`, hai chi nhánh bắt đầu từ 0. Các hàng tồn đã được phân bổ trước đó không bị ghi đè.
+
+| Phương thức | Đường dẫn | Mô tả |
+| :--- | :--- | :--- |
+| `GET` | `/api/inventory` | Tồn từng SKU theo ba địa điểm |
+| `GET` | `/api/inventory/locations` | Danh sách địa điểm |
+| `GET` | `/api/inventory/transfers` | Danh sách phiếu điều chuyển |
+| `POST` | `/api/inventory/transfers` | Tạo phiếu chờ xuất, nguồn cố định là LAB |
+| `PATCH` | `/api/inventory/transfers/{id}/dispatch` | Kiểm tra nguyên tử và trừ tồn LAB, chuyển sang `IN_TRANSIT` |
+| `PATCH` | `/api/inventory/transfers/{id}/receive` | Cộng tồn chi nhánh và chuyển sang `RECEIVED` |
+
+Tạo phiếu chưa làm thay đổi tồn; việc xuất kho kiểm tra lại số dư bằng câu lệnh cập nhật có điều kiện trong database. Chỉ phiếu `IN_TRANSIT` mới nhận được; các bước cập nhật tồn, trạng thái và lịch sử biến động nằm trong transaction catalog. Lịch sử được lưu trong bảng `inventory_movements`.
+
+POS gửi `Idempotency-Key` cho `POST /api/orders`. `order-pos-service` gọi endpoint nội bộ `POST /internal/inventory/sales/deduct` trên cổng nội bộ của catalog-service; endpoint này không được định tuyến qua API Gateway. Địa điểm bán được xác định từ nhãn chi nhánh hiện tại; nhãn không khớp địa điểm đã hỗ trợ bị từ chối, không trừ vào kho mặc định.
+
+Lệnh kiểm thử nhanh:
+
+```bash
+mvn -pl catalog-service,order-pos-service -am test
+```
+
+Internal Portal dùng `/api/inventory` qua API Gateway (Vite dev proxy tới cổng 8080). Khi triển khai production, cấu hình `VITE_API_GATEWAY_URL` theo môi trường.
+
+---
+
+## 10. Quy tắc Git & Phân nhánh (Git Workflow)
 
 1. **Nhánh `main`:** Nhánh chính chứa mã nguồn ổn định nhất phục vụ nộp bài và demo. Không commit/push trực tiếp vào nhánh này.
 2. **Nhánh `dev`:** Nhánh làm việc chung hàng ngày của team. Mọi tính năng sau khi kiểm thử nội bộ sẽ được merge vào `dev`.
