@@ -1,6 +1,12 @@
 server:
   port: 8083
 
+services:
+  catalog-service:
+    url: ${CATALOG_SERVICE_URL:http://localhost:8082}
+  eyewear-lab-service:
+    url: ${EYEWEAR_LAB_SERVICE_URL:http://localhost:8084}
+
 spring:
   application:
     name: order-pos-service
@@ -18,8 +24,3 @@ spring:
         format_sql: true
 
 # Cấu hình Feign Client trỏ sang Lab Service và Catalog Service
-services:
-  catalog-service:
-    url: http://localhost:8082
-  eyewear-lab-service:
-    url: http://localhost:8084
