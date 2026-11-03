@@ -11,5 +11,6 @@ public interface UserService {
     UserDTO createStaff(CreateStaffRequest request);
     UserDTO createCustomer(CreateCustomerRequest request);
     UserDTO toggleUserStatus(Long id);
+    void deleteUser(Long id);
     LoginResponse login(LoginRequest request);
 }
