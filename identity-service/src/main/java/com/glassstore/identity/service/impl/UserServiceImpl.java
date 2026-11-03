@@ -140,20 +140,25 @@ public class UserServiceImpl implements UserService {
     public LoginResponse login(LoginRequest request) {
         String inputIdentifier = request.getUsername() != null ? request.getUsername().trim() : "";
         String lookup = inputIdentifier;
-        if ("nv_pos".equalsIgnoreCase(inputIdentifier) || "staff".equalsIgnoreCase(inputIdentifier)) {
+        if ("nv_pos".equalsIgnoreCase(inputIdentifier) || "staff".equalsIgnoreCase(inputIdentifier) || "posoptic@gmail.com".equalsIgnoreCase(inputIdentifier)) {
             lookup = "pos";
-        } else if ("bs_tuyet".equalsIgnoreCase(inputIdentifier) || "optometrist".equalsIgnoreCase(inputIdentifier)) {
+        } else if ("bs_tuyet".equalsIgnoreCase(inputIdentifier) || "optometrist".equalsIgnoreCase(inputIdentifier) || "optometryoptic@gmail.com".equalsIgnoreCase(inputIdentifier)) {
             lookup = "optometry";
-        } else if ("ktv_lab".equalsIgnoreCase(inputIdentifier) || "labtech".equalsIgnoreCase(inputIdentifier)) {
+        } else if ("ktv_lab".equalsIgnoreCase(inputIdentifier) || "labtech".equalsIgnoreCase(inputIdentifier) || "laboptic@gmail.com".equalsIgnoreCase(inputIdentifier)) {
             lookup = "lab";
+        } else if ("adminoptic@gmail.com".equalsIgnoreCase(inputIdentifier) || "admin@optivision.vn".equalsIgnoreCase(inputIdentifier)) {
+            lookup = "admin";
         }
         final String searchId = lookup;
+        final String lowerId = inputIdentifier.toLowerCase();
 
         User user = userRepository.findByUsername(inputIdentifier)
-                .or(() -> userRepository.findByEmail(inputIdentifier))
-                .or(() -> userRepository.findByEmployeeCode(inputIdentifier))
+                .or(() -> userRepository.findByUsername(lowerId))
                 .or(() -> userRepository.findByUsername(searchId))
-                .or(() -> userRepository.findByEmail(searchId))
+                .or(() -> userRepository.findByEmail(inputIdentifier))
+                .or(() -> userRepository.findByEmail(lowerId))
+                .or(() -> userRepository.findByEmployeeCode(inputIdentifier))
+                .or(() -> userRepository.findByEmployeeCode(inputIdentifier.toUpperCase()))
                 .orElseThrow(() -> new RuntimeException("Tài khoản hoặc mã nhân viên không tồn tại trong hệ thống!"));
 
         String inputPassword = request.getPassword() != null ? request.getPassword().trim() : "";
