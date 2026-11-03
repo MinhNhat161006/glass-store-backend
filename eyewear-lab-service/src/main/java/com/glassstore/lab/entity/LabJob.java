@@ -18,20 +18,20 @@ public class LabJob {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "order_id", nullable = false)
+    @Column(name = "order_id", nullable = false, unique = true)
     private Long orderId;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "prescription_id", nullable = false)
     private Prescription prescription;
 
-    @Column(name = "frame_sku", nullable = false, length = 100)
+    @Column(name = "frame_sku", length = 100)
     private String frameSku;
 
     @Column(name = "frame_name")
     private String frameName;
 
-    @Column(name = "lens_sku", nullable = false, length = 100)
+    @Column(name = "lens_sku", length = 100)
     private String lensSku;
 
     @Column(name = "lens_name")

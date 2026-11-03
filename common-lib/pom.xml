@@ -30,6 +30,13 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+
+        <!-- Provides org.springframework.dao.* so the shared exception handler can map
+             DataIntegrityViolation / OptimisticLocking failures to a stable error body. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+        </dependency>
     </dependencies>
 </project>
 

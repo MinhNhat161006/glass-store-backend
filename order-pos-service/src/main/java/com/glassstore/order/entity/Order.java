@@ -1,6 +1,7 @@
 package com.glassstore.order.entity;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.glassstore.order.domain.*;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -9,8 +10,19 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * A purchase, from either the online channel or the in-store POS (SRS §4.9 — one domain).
+ *
+ * <p>Monetary fields are frozen at confirmation: {@code totalAmount}/{@code discountAmount}/
+ * {@code finalAmount} are computed server-side and never accept a client value (BR-05,
+ * BR-16). Order and payment status are separate fields and must never be conflated.</p>
+ */
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", indexes = {
+        @Index(name = "idx_orders_customer", columnList = "customer_id"),
+        @Index(name = "idx_orders_status", columnList = "status"),
+        @Index(name = "idx_orders_code", columnList = "order_code", unique = true)
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,67 +34,101 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "order_code", nullable = false, unique = true)
+    @Column(name = "order_code", nullable = false, unique = true, length = 60)
     private String orderCode;
+
+    /**
+     * Client-supplied retry token. UNIQUE so a replayed checkout cannot create a second
+     * order (EX-ORD-04, EX-ORD-05).
+     */
+    @Column(name = "idempotency_key", unique = true, length = 120)
+    private String idempotencyKey;
 
     @Column(name = "customer_id")
     private Long customerId;
 
-    @Column(name = "customer_name", nullable = false)
+    @Column(name = "customer_name", nullable = false, length = 120)
     private String customerName;
 
-    @Column(name = "customer_phone", nullable = false)
+    @Column(name = "customer_phone", nullable = false, length = 30)
     private String customerPhone;
 
-    @Column(name = "shipping_address")
+    @Column(name = "shipping_address", length = 500)
     private String shippingAddress;
 
-    @Column(name = "channel")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "channel", nullable = false, length = 20)
     @Builder.Default
-    private String channel = "POS";
+    private SalesChannel channel = SalesChannel.ONLINE;
 
-    @Column(name = "order_type")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_type", length = 30)
     @Builder.Default
-    private String orderType = "COMPLETE_GLASSES";
+    private OrderType orderType = OrderType.COMPLETE_GLASSES;
 
-    @Column(name = "total_amount", precision = 12, scale = 2, nullable = false)
+    @Column(name = "total_amount", precision = 14, scale = 2, nullable = false)
     private BigDecimal totalAmount;
 
-    @Column(name = "discount_amount", precision = 12, scale = 2)
+    @Column(name = "discount_amount", precision = 14, scale = 2, nullable = false)
     @Builder.Default
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
-    @Column(name = "final_amount", precision = 12, scale = 2, nullable = false)
+    @Column(name = "final_amount", precision = 14, scale = 2, nullable = false)
     private BigDecimal finalAmount;
 
-    @Column(name = "status")
+    /** Order lifecycle only — see {@link PaymentStatus} for money state. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 30)
     @Builder.Default
-    private String status = "PAID";
+    private OrderStatus status = OrderStatus.PENDING_PAYMENT;
 
-    @Column(name = "payment_method")
-    @Builder.Default
-    private String paymentMethod = "VIETQR";
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", length = 20)
+    private PaymentMethod paymentMethod;
 
-    @Column(name = "staff_name")
+    @Column(name = "voucher_code", length = 60)
+    private String voucherCode;
+
+    /** Id of the prescription used for lens fabrication (BR-25 prescription versioning). */
+    @Column(name = "prescription_id")
+    private Long prescriptionId;
+
+    @Column(name = "staff_name", length = 120)
     private String staffName;
 
-    @Column(name = "branch_name")
-    @Builder.Default
-    private String branchName = "Flagship Q.1 (TP.HCM)";
+    @Column(name = "branch_name", length = 120)
+    private String branchName;
 
-    @Column(name = "notes")
+    @Column(name = "notes", length = 1000)
     private String notes;
 
-    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @Column(name = "pos_session_id")
+    private Long posSessionId;
+
+    @Column(name = "invoice_number", length = 80)
+    private String invoiceNumber;
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
 
-    @Column(name = "created_at")
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    @Builder.Default
+    private List<OrderStatusHistory> statusHistory = new ArrayList<>();
+
+    @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    @Column(name = "updated_at")
+    @Column(name = "updated_at", nullable = false)
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    /** Convenience for guards; keeps callers from parsing the string themselves. */
+    @Transient
+    public OrderStatus currentStatus() {
+        return status == null ? OrderStatus.PENDING_PAYMENT : status;
+    }
 }

@@ -5,10 +5,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface LabJobRepository extends JpaRepository<LabJob, Long> {
     List<LabJob> findByStatusOrderByCreatedAtDesc(String status);
     List<LabJob> findAllByOrderByCreatedAtDesc();
+    /** One fabrication job per order (BR-29). */
+    Optional<LabJob> findByOrderId(Long orderId);
 }
-
