@@ -52,4 +52,10 @@ public class UserController {
         UserDTO user = userService.toggleUserStatus(id);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái người dùng thành công", user));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable("id") Long id) {
+        userService.deleteUser(id);
+        return ResponseEntity.ok(ApiResponse.success("Xóa người dùng thành công", null));
+    }
 }

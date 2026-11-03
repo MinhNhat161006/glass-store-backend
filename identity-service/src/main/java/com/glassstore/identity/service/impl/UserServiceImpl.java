@@ -46,24 +46,40 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserDTO createStaff(CreateStaffRequest request) {
-        String username = request.getEmail().split("@")[0].toLowerCase().replaceAll("[^a-z0-9]", "");
+        String baseEmail = request.getEmail() != null ? request.getEmail() : "user" + (new Random().nextInt(900) + 100) + "@optivision.vn";
+        String username = baseEmail.split("@")[0].toLowerCase().replaceAll("[^a-z0-9]", "");
         if (userRepository.findByUsername(username).isPresent()) {
             username += "_" + (new Random().nextInt(900) + 100);
         }
 
-        Role role = roleRepository.findByName(request.getRoleName())
+        String roleName = request.getRoleName();
+        if (roleName == null || roleName.trim().isEmpty()) {
+            roleName = "ROLE_SALES_STAFF";
+        }
+        final String targetRole = roleName;
+        Role role = roleRepository.findByName(targetRole)
                 .orElseGet(() -> roleRepository.findByName("ROLE_SALES_STAFF")
                         .orElseThrow(() -> new RuntimeException("Role không tồn tại")));
 
+        String pass = (request.getPassword() != null && !request.getPassword().trim().isEmpty())
+                ? request.getPassword().trim()
+                : "Password2026@";
+
+        String userStatus = (request.getStatus() != null && !request.getStatus().trim().isEmpty())
+                ? request.getStatus().trim().toUpperCase()
+                : "ACTIVE";
+
         User user = User.builder()
                 .username(username)
-                .email(request.getEmail())
-                .passwordHash(passwordEncoder.encode("Password2026@"))
-                .fullName(request.getFullName())
-                .phoneNumber(request.getPhoneNumber())
-                .employeeCode(request.getEmployeeCode() != null ? request.getEmployeeCode() : "STF-" + (new Random().nextInt(900) + 100))
+                .email(baseEmail)
+                .passwordHash(passwordEncoder.encode(pass))
+                .fullName(request.getFullName() != null ? request.getFullName() : "Nhân viên mới")
+                .phoneNumber(request.getPhoneNumber() != null ? request.getPhoneNumber() : "0901000000")
+                .employeeCode(request.getEmployeeCode() != null && !request.getEmployeeCode().trim().isEmpty() 
+                        ? request.getEmployeeCode() 
+                        : "STF-" + (new Random().nextInt(900) + 100))
                 .branchName(request.getBranchName() != null ? request.getBranchName() : "Flagship Q.1 (TP.HCM)")
-                .status("ACTIVE")
+                .status(userStatus)
                 .roles(new HashSet<>(Collections.singletonList(role)))
                 .build();
 
@@ -84,7 +100,7 @@ public class UserServiceImpl implements UserService {
         User user = User.builder()
                 .username(username)
                 .email(email)
-                .passwordHash(passwordEncoder.encode("Password2026@"))
+                .passwordHash(passwordEncoder.encode("Customer2026@"))
                 .fullName(request.getFullName())
                 .phoneNumber(request.getPhoneNumber())
                 .branchName(request.getAddress())
@@ -100,8 +116,20 @@ public class UserServiceImpl implements UserService {
     public UserDTO toggleUserStatus(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng với ID: " + id));
-        user.setStatus("ACTIVE".equalsIgnoreCase(user.getStatus()) ? "LOCKED" : "ACTIVE");
+        if ("PENDING".equalsIgnoreCase(user.getStatus())) {
+            user.setStatus("ACTIVE");
+        } else if ("ACTIVE".equalsIgnoreCase(user.getStatus())) {
+            user.setStatus("LOCKED");
+        } else {
+            user.setStatus("ACTIVE");
+        }
         return mapToDTO(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public void deleteUser(Long id) {
+        userRepository.deleteById(id);
     }
 
     @Override
@@ -119,6 +147,10 @@ public class UserServiceImpl implements UserService {
 
         if (!matches) {
             throw new RuntimeException("Mật khẩu không chính xác!");
+        }
+
+        if ("PENDING".equalsIgnoreCase(user.getStatus())) {
+            throw new RuntimeException("Tài khoản đang ở trạng thái Chờ Duyệt (Pending). Vui lòng liên hệ Quản Trị Viên (Admin) để kích hoạt!");
         }
 
         if (!"ACTIVE".equalsIgnoreCase(user.getStatus())) {
