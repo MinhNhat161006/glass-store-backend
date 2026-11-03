@@ -40,6 +40,12 @@ public class User {
     @Column(length = 20)
     private String status = "ACTIVE";
 
+    @Column(name = "failed_attempts")
+    private int failedAttempts = 0;
+
+    @Column(name = "lockout_expiration")
+    private LocalDateTime lockoutExpiration;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "user_roles",
@@ -58,7 +64,7 @@ public class User {
 
     public User() {}
 
-    public User(Long id, String username, String email, String passwordHash, String fullName, String phoneNumber, String employeeCode, String branchName, String status, Set<Role> roles) {
+    public User(Long id, String username, String email, String passwordHash, String fullName, String phoneNumber, String employeeCode, String branchName, String status, int failedAttempts, LocalDateTime lockoutExpiration, Set<Role> roles) {
         this.id = id;
         this.username = username;
         this.email = email;
@@ -68,6 +74,8 @@ public class User {
         this.employeeCode = employeeCode;
         this.branchName = branchName;
         this.status = status != null ? status : "ACTIVE";
+        this.failedAttempts = failedAttempts;
+        this.lockoutExpiration = lockoutExpiration;
         this.roles = roles != null ? roles : new HashSet<>();
     }
 
@@ -85,6 +93,8 @@ public class User {
         private String employeeCode;
         private String branchName;
         private String status = "ACTIVE";
+        private int failedAttempts = 0;
+        private LocalDateTime lockoutExpiration;
         private Set<Role> roles = new HashSet<>();
 
         public UserBuilder id(Long id) { this.id = id; return this; }
@@ -96,9 +106,11 @@ public class User {
         public UserBuilder employeeCode(String employeeCode) { this.employeeCode = employeeCode; return this; }
         public UserBuilder branchName(String branchName) { this.branchName = branchName; return this; }
         public UserBuilder status(String status) { this.status = status; return this; }
+        public UserBuilder failedAttempts(int failedAttempts) { this.failedAttempts = failedAttempts; return this; }
+        public UserBuilder lockoutExpiration(LocalDateTime lockoutExpiration) { this.lockoutExpiration = lockoutExpiration; return this; }
         public UserBuilder roles(Set<Role> roles) { this.roles = roles; return this; }
         public User build() {
-            return new User(id, username, email, passwordHash, fullName, phoneNumber, employeeCode, branchName, status, roles);
+            return new User(id, username, email, passwordHash, fullName, phoneNumber, employeeCode, branchName, status, failedAttempts, lockoutExpiration, roles);
         }
     }
 
@@ -120,10 +132,19 @@ public class User {
     public void setBranchName(String branchName) { this.branchName = branchName; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public int getFailedAttempts() { return failedAttempts; }
+    public void setFailedAttempts(int failedAttempts) { this.failedAttempts = failedAttempts; }
+    public LocalDateTime getLockoutExpiration() { return lockoutExpiration; }
+    public void setLockoutExpiration(LocalDateTime lockoutExpiration) { this.lockoutExpiration = lockoutExpiration; }
     public Set<Role> getRoles() { return roles; }
     public void setRoles(Set<Role> roles) { this.roles = roles; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public boolean isLocked() {
+        if (lockoutExpiration == null) return false;
+        return LocalDateTime.now().isBefore(lockoutExpiration);
+    }
 }
