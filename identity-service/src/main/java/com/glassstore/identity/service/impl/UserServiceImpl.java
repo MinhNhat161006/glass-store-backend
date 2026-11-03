@@ -67,7 +67,7 @@ public class UserServiceImpl implements UserService {
 
         String pass = (request.getPassword() != null && !request.getPassword().trim().isEmpty())
                 ? request.getPassword().trim()
-                : "Password2026@";
+                : "123456";
 
         String userStatus = (request.getStatus() != null && !request.getStatus().trim().isEmpty())
                 ? request.getStatus().trim().toUpperCase()
@@ -138,37 +138,18 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public LoginResponse login(LoginRequest request) {
-        String inputIdentifier = request.getUsername() != null ? request.getUsername().trim() : "";
-        String lookup = inputIdentifier;
-        if ("nv_pos".equalsIgnoreCase(inputIdentifier) || "staff".equalsIgnoreCase(inputIdentifier) || "posoptic@gmail.com".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "pos";
-        } else if ("bs_tuyet".equalsIgnoreCase(inputIdentifier) || "optometrist".equalsIgnoreCase(inputIdentifier) || "optometryoptic@gmail.com".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "optometry";
-        } else if ("ktv_lab".equalsIgnoreCase(inputIdentifier) || "labtech".equalsIgnoreCase(inputIdentifier) || "laboptic@gmail.com".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "lab";
-        } else if ("adminoptic@gmail.com".equalsIgnoreCase(inputIdentifier) || "admin@optivision.vn".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "admin";
+        String identifier = request.getUsername() != null ? request.getUsername().trim() : "";
+        if (identifier.isEmpty()) {
+            throw new RuntimeException("Vui lòng nhập tài khoản, email hoặc mã nhân viên!");
         }
-        final String searchId = lookup;
-        final String lowerId = inputIdentifier.toLowerCase();
 
-        User user = userRepository.findByUsername(inputIdentifier)
-                .or(() -> userRepository.findByUsername(lowerId))
-                .or(() -> userRepository.findByUsername(searchId))
-                .or(() -> userRepository.findByEmail(inputIdentifier))
-                .or(() -> userRepository.findByEmail(lowerId))
-                .or(() -> userRepository.findByEmployeeCode(inputIdentifier))
-                .or(() -> userRepository.findByEmployeeCode(inputIdentifier.toUpperCase()))
+        User user = userRepository.findByUsername(identifier)
+                .or(() -> userRepository.findByEmail(identifier))
+                .or(() -> userRepository.findByEmployeeCode(identifier))
                 .orElseThrow(() -> new RuntimeException("Tài khoản hoặc mã nhân viên không tồn tại trong hệ thống!"));
 
-        String inputPassword = request.getPassword() != null ? request.getPassword().trim() : "";
-        boolean matches = passwordEncoder.matches(inputPassword, user.getPasswordHash())
-                || ("Password2026@".equals(inputPassword) && passwordEncoder.matches("123456", user.getPasswordHash()))
-                || ("123456".equals(inputPassword) && passwordEncoder.matches("Password2026@", user.getPasswordHash()))
-                || "Password2026@".equals(inputPassword)
-                || "123456".equals(inputPassword);
-
-        if (!matches) {
+        String rawPassword = request.getPassword() != null ? request.getPassword().trim() : "";
+        if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             throw new RuntimeException("Mật khẩu không chính xác!");
         }
 

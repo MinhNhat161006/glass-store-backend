@@ -37,7 +37,7 @@ public class DataInitializer implements CommandLineRunner {
         Role customerRole = roleRepository.findByName("ROLE_CUSTOMER")
                 .orElseGet(() -> roleRepository.save(Role.builder().name("ROLE_CUSTOMER").description("Khách hàng mua sắm đa kênh").build()));
 
-        String defaultPassHash = passwordEncoder.encode("Password2026@");
+        String defaultPassHash = passwordEncoder.encode("123456");
 
         // 2. Clean 4 Staff Members
         // 2.1 Admin
