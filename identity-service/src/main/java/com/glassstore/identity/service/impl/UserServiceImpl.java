@@ -75,7 +75,7 @@ public class UserServiceImpl implements UserService {
 
         String pass = (request.getPassword() != null && !request.getPassword().trim().isEmpty())
                 ? request.getPassword().trim()
-                : "Password2026@";
+                : "123456";
 
         String userStatus = (request.getStatus() != null && !request.getStatus().trim().isEmpty())
                 ? request.getStatus().trim().toUpperCase()
@@ -194,32 +194,17 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public LoginResponse login(LoginRequest request) {
-        String inputIdentifier = request.getEffectiveIdentifier();
-        if (inputIdentifier.isEmpty()) {
+        // Lấy identifier từ request (hỗ trợ cả email và username/employeeCode)
+        String identifier = request.getEffectiveIdentifier();
+        if (identifier == null || identifier.isEmpty()) {
             throw new BadCredentialsException("Vui lòng cung cấp email hoặc tài khoản đăng nhập!");
         }
 
-        String lookup = inputIdentifier;
-        if ("nv_pos".equalsIgnoreCase(inputIdentifier) || "staff".equalsIgnoreCase(inputIdentifier) || "posoptic@gmail.com".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "pos";
-        } else if ("bs_tuyet".equalsIgnoreCase(inputIdentifier) || "optometrist".equalsIgnoreCase(inputIdentifier) || "optometryoptic@gmail.com".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "optometry";
-        } else if ("ktv_lab".equalsIgnoreCase(inputIdentifier) || "labtech".equalsIgnoreCase(inputIdentifier) || "laboptic@gmail.com".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "lab";
-        } else if ("adminoptic@gmail.com".equalsIgnoreCase(inputIdentifier) || "admin@optivision.vn".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "admin";
-        }
-        final String searchId = lookup;
-        final String lowerId = inputIdentifier.toLowerCase();
-
-        // Tìm user: ưu tiên email trước (phù hợp customer web), sau đó username/employeeCode (nhân viên nội bộ)
-        User user = userRepository.findByEmail(inputIdentifier.toLowerCase())
-                .or(() -> userRepository.findByUsername(inputIdentifier))
-                .or(() -> userRepository.findByUsername(lowerId))
-                .or(() -> userRepository.findByUsername(searchId))
-                .or(() -> userRepository.findByEmployeeCode(inputIdentifier))
-                .or(() -> userRepository.findByEmployeeCode(inputIdentifier.toUpperCase()))
-                .or(() -> userRepository.findByEmail(searchId))
+        // Tìm user: ưu tiên email (customer web), sau đó username và employeeCode (nhân viên nội bộ)
+        User user = userRepository.findByEmail(identifier.toLowerCase())
+                .or(() -> userRepository.findByUsername(identifier))
+                .or(() -> userRepository.findByEmployeeCode(identifier))
+                .or(() -> userRepository.findByEmployeeCode(identifier.toUpperCase()))
                 .orElseThrow(() -> new BadCredentialsException("Email hoặc mật khẩu không chính xác!"));
 
         // 1. Kiểm tra khóa tài khoản (Brute Force Protection)
