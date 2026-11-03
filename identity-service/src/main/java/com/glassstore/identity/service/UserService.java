@@ -13,4 +13,9 @@ public interface UserService {
     UserDTO toggleUserStatus(Long id);
     void deleteUser(Long id);
     LoginResponse login(LoginRequest request);
+
+    // Phương thức Authentication không OTP mới
+    UserDTO registerCustomer(CustomerRegisterRequest request);
+    LoginResponse refreshToken(String refreshToken);
+    UserDTO getCurrentUser(Long userId);
 }

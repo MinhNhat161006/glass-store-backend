@@ -22,7 +22,7 @@ public class Payment {
     @Column(name = "order_id", nullable = false)
     private Long orderId;
 
-    @Column(name = "payment_method", nullable = false)
+    @Column(name = "payment_method", nullable = false, columnDefinition = "varchar(32)")
     private String paymentMethod;
 
     @Column(name = "transaction_code")

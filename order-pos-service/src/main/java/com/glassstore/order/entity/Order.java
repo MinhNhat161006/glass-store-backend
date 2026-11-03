@@ -55,6 +55,10 @@ public class Order {
     @Column(name = "final_amount", precision = 12, scale = 2, nullable = false)
     private BigDecimal finalAmount;
 
+    @Column(name = "tax_amount", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal taxAmount = BigDecimal.ZERO;
+
     @Column(name = "status")
     @Builder.Default
     private String status = "PAID";

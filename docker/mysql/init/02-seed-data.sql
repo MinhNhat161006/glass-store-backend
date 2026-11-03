@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS `users` (
     `employee_code` VARCHAR(50) NULL,
     `branch_name` VARCHAR(100) DEFAULT 'Flagship Q.1 (TP.HCM)',
     `status` VARCHAR(20) DEFAULT 'ACTIVE',
+    `failed_attempts` INT DEFAULT 0,
+    `lockout_expiration` TIMESTAMP NULL DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -121,6 +123,8 @@ CREATE TABLE IF NOT EXISTS `products` (
     `product_type` ENUM('FRAME', 'LENS', 'SUNGLASSES', 'ACCESSORY') NOT NULL,
     `description` TEXT,
     `status` VARCHAR(20) DEFAULT 'ACTIVE',
+    `failed_attempts` INT DEFAULT 0,
+    `lockout_expiration` TIMESTAMP NULL DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT `fk_products_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`),
@@ -142,6 +146,8 @@ CREATE TABLE IF NOT EXISTS `product_variants` (
     `stock_quantity` INT NOT NULL DEFAULT 50,
     `image_url` VARCHAR(500),
     `status` VARCHAR(20) DEFAULT 'ACTIVE',
+    `failed_attempts` INT DEFAULT 0,
+    `lockout_expiration` TIMESTAMP NULL DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT `fk_variants_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE

@@ -3,10 +3,15 @@ package com.glassstore.identity.service.impl;
 import com.glassstore.identity.dto.*;
 import com.glassstore.identity.entity.Role;
 import com.glassstore.identity.entity.User;
+import com.glassstore.identity.exception.EmailAlreadyExistsException;
 import com.glassstore.identity.repository.RoleRepository;
 import com.glassstore.identity.repository.UserRepository;
+import com.glassstore.identity.security.BruteForceService;
+import com.glassstore.identity.security.JwtTokenProvider;
 import com.glassstore.identity.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,11 +21,14 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final BruteForceService bruteForceService;
 
     @Override
     public List<UserDTO> getAllStaff() {
@@ -46,11 +54,11 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserDTO createStaff(CreateStaffRequest request) {
-        if (request.getEmail() != null && userRepository.findByEmail(request.getEmail().trim()).isPresent()) {
-            throw new RuntimeException("Email '" + request.getEmail().trim() + "' đã được đăng ký trong hệ thống!");
+        if (request.getEmail() != null && userRepository.findByEmail(request.getEmail().trim().toLowerCase()).isPresent()) {
+            throw new EmailAlreadyExistsException("Email '" + request.getEmail().trim() + "' đã được đăng ký trong hệ thống!");
         }
 
-        String baseEmail = request.getEmail() != null ? request.getEmail().trim() : "user" + (new Random().nextInt(900) + 100) + "@optivision.vn";
+        String baseEmail = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : "user" + (new Random().nextInt(900) + 100) + "@optivision.vn";
         String username = baseEmail.split("@")[0].toLowerCase().replaceAll("[^a-z0-9]", "");
         if (userRepository.findByUsername(username).isPresent()) {
             username += "_" + (new Random().nextInt(900) + 100);
@@ -67,7 +75,7 @@ public class UserServiceImpl implements UserService {
 
         String pass = (request.getPassword() != null && !request.getPassword().trim().isEmpty())
                 ? request.getPassword().trim()
-                : "Password2026@";
+                : "123456";
 
         String userStatus = (request.getStatus() != null && !request.getStatus().trim().isEmpty())
                 ? request.getStatus().trim().toUpperCase()
@@ -79,8 +87,8 @@ public class UserServiceImpl implements UserService {
                 .passwordHash(passwordEncoder.encode(pass))
                 .fullName(request.getFullName() != null ? request.getFullName() : "Nhân viên mới")
                 .phoneNumber(request.getPhoneNumber() != null ? request.getPhoneNumber() : "0901000000")
-                .employeeCode(request.getEmployeeCode() != null && !request.getEmployeeCode().trim().isEmpty() 
-                        ? request.getEmployeeCode() 
+                .employeeCode(request.getEmployeeCode() != null && !request.getEmployeeCode().trim().isEmpty()
+                        ? request.getEmployeeCode()
                         : "STF-" + (new Random().nextInt(900) + 100))
                 .branchName(request.getBranchName() != null ? request.getBranchName() : "Flagship Q.1 (TP.HCM)")
                 .status(userStatus)
@@ -93,19 +101,24 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserDTO createCustomer(CreateCustomerRequest request) {
+        String email = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : null;
+        if (email != null && userRepository.findByEmail(email).isPresent()) {
+            throw new EmailAlreadyExistsException("Email '" + email + "' đã tồn tại trong hệ thống!");
+        }
+
         String username = "cus_" + (request.getPhoneNumber() != null ? request.getPhoneNumber() : UUID.randomUUID().toString().substring(0, 8));
-        String email = request.getEmail() != null && !request.getEmail().trim().isEmpty() 
-                ? request.getEmail() 
-                : username + "@customer.optivision.vn";
+        if (email == null || email.isEmpty()) {
+            email = username + "@customer.optivision.vn";
+        }
 
         Role customerRole = roleRepository.findByName("ROLE_CUSTOMER")
-                .orElseThrow(() -> new RuntimeException("Role ROLE_CUSTOMER không tồn tại"));
+                .orElseGet(() -> roleRepository.save(Role.builder().name("ROLE_CUSTOMER").description("Khách hàng").build()));
 
         User user = User.builder()
                 .username(username)
                 .email(email)
-                .passwordHash(passwordEncoder.encode("Customer2026@"))
-                .fullName(request.getFullName())
+                .passwordHash(passwordEncoder.encode("Password2026@"))
+                .fullName(request.getFullName() != null ? request.getFullName() : "Khách Hàng")
                 .phoneNumber(request.getPhoneNumber())
                 .branchName(request.getAddress())
                 .status("ACTIVE")
@@ -117,15 +130,58 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
+    public UserDTO registerCustomer(CustomerRegisterRequest request) {
+        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+            throw new IllegalArgumentException("Email không được để trống!");
+        }
+        if (request.getPassword() == null || request.getPassword().length() < 6) {
+            throw new IllegalArgumentException("Mật khẩu phải có độ dài tối thiểu 6 ký tự!");
+        }
+
+        String normalizedEmail = request.getEmail().trim().toLowerCase();
+        if (userRepository.findByEmail(normalizedEmail).isPresent()) {
+            throw new EmailAlreadyExistsException("Email '" + normalizedEmail + "' đã được đăng ký trong hệ thống!");
+        }
+
+        String baseUsername = normalizedEmail.split("@")[0].replaceAll("[^a-z0-9]", "");
+        if (baseUsername.isEmpty()) {
+            baseUsername = "customer";
+        }
+        String finalUsername = baseUsername;
+        if (userRepository.findByUsername(finalUsername).isPresent()) {
+            finalUsername = baseUsername + "_" + (new Random().nextInt(9000) + 1000);
+        }
+
+        Role customerRole = roleRepository.findByName("ROLE_CUSTOMER")
+                .orElseGet(() -> roleRepository.save(Role.builder().name("ROLE_CUSTOMER").description("Khách hàng mua sắm").build()));
+
+        User user = User.builder()
+                .username(finalUsername)
+                .email(normalizedEmail)
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .fullName(request.getFullName() != null ? request.getFullName().trim() : "Khách Hàng")
+                .phoneNumber(request.getPhoneNumber() != null ? request.getPhoneNumber().trim() : null)
+                .status("ACTIVE") // Tài khoản có trạng thái ACTIVE ngay sau khi đăng ký thành công, không OTP
+                .failedAttempts(0)
+                .roles(new HashSet<>(Collections.singletonList(customerRole)))
+                .build();
+
+        User savedUser = userRepository.save(user);
+        log.info("Đăng ký thành công tài khoản khách hàng ID: {}, Email: {}", savedUser.getId(), savedUser.getEmail());
+        return mapToDTO(savedUser);
+    }
+
+    @Override
+    @Transactional
     public UserDTO toggleUserStatus(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng với ID: " + id));
-        if ("PENDING".equalsIgnoreCase(user.getStatus())) {
-            user.setStatus("ACTIVE");
-        } else if ("ACTIVE".equalsIgnoreCase(user.getStatus())) {
+        if ("ACTIVE".equalsIgnoreCase(user.getStatus())) {
             user.setStatus("LOCKED");
         } else {
             user.setStatus("ACTIVE");
+            user.setFailedAttempts(0);
+            user.setLockoutExpiration(null);
         }
         return mapToDTO(userRepository.save(user));
     }
@@ -138,42 +194,42 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public LoginResponse login(LoginRequest request) {
-        String inputIdentifier = request.getUsername() != null ? request.getUsername().trim() : "";
-        String lookup = inputIdentifier;
-        if ("nv_pos".equalsIgnoreCase(inputIdentifier) || "staff".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "pos";
-        } else if ("bs_tuyet".equalsIgnoreCase(inputIdentifier) || "optometrist".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "optometry";
-        } else if ("ktv_lab".equalsIgnoreCase(inputIdentifier) || "labtech".equalsIgnoreCase(inputIdentifier)) {
-            lookup = "lab";
+        // Lấy identifier từ request (hỗ trợ cả email và username/employeeCode)
+        String identifier = request.getEffectiveIdentifier();
+        if (identifier == null || identifier.isEmpty()) {
+            throw new BadCredentialsException("Vui lòng cung cấp email hoặc tài khoản đăng nhập!");
         }
-        final String searchId = lookup;
 
-        User user = userRepository.findByUsername(inputIdentifier)
-                .or(() -> userRepository.findByEmail(inputIdentifier))
-                .or(() -> userRepository.findByEmployeeCode(inputIdentifier))
-                .or(() -> userRepository.findByUsername(searchId))
-                .or(() -> userRepository.findByEmail(searchId))
-                .orElseThrow(() -> new RuntimeException("Tài khoản hoặc mã nhân viên không tồn tại trong hệ thống!"));
+        // Tìm user: ưu tiên email (customer web), sau đó username và employeeCode (nhân viên nội bộ)
+        User user = userRepository.findByEmail(identifier.toLowerCase())
+                .or(() -> userRepository.findByUsername(identifier))
+                .or(() -> userRepository.findByEmployeeCode(identifier))
+                .or(() -> userRepository.findByEmployeeCode(identifier.toUpperCase()))
+                .orElseThrow(() -> new BadCredentialsException("Email hoặc mật khẩu không chính xác!"));
 
+        // 1. Kiểm tra khóa tài khoản (Brute Force Protection)
+        bruteForceService.checkIfLocked(user);
+
+        // 2. Xác thực mật khẩu với BCrypt
         String inputPassword = request.getPassword() != null ? request.getPassword().trim() : "";
-        boolean matches = passwordEncoder.matches(inputPassword, user.getPasswordHash())
-                || ("Password2026@".equals(inputPassword) && passwordEncoder.matches("123456", user.getPasswordHash()))
-                || ("123456".equals(inputPassword) && passwordEncoder.matches("Password2026@", user.getPasswordHash()))
-                || "Password2026@".equals(inputPassword)
-                || "123456".equals(inputPassword);
+        boolean matches = passwordEncoder.matches(inputPassword, user.getPasswordHash());
 
         if (!matches) {
-            throw new RuntimeException("Mật khẩu không chính xác!");
+            bruteForceService.recordFailedAttempt(user);
+            throw new BadCredentialsException("Email hoặc mật khẩu không chính xác!");
         }
 
-        if ("PENDING".equalsIgnoreCase(user.getStatus())) {
-            throw new RuntimeException("Tài khoản đang ở trạng thái Chờ Duyệt (Pending). Vui lòng liên hệ Quản Trị Viên (Admin) để kích hoạt!");
-        }
+        // 3. Đăng nhập thành công -> Reset số lần thử sai
+        bruteForceService.recordSuccess(user);
 
+        // 4. Kiểm tra trạng thái tài khoản
         if (!"ACTIVE".equalsIgnoreCase(user.getStatus())) {
-            throw new RuntimeException("Tài khoản này hiện đang bị tạm khóa!");
+            throw new RuntimeException("Tài khoản này hiện đang bị tạm khóa hoặc ngừng hoạt động!");
         }
+
+        // 5. Cấp phát JWT Access Token (24h) và Refresh Token (7 ngày)
+        String accessToken = jwtTokenProvider.generateAccessToken(user);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user);
 
         Set<String> roleNames = user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
         String primaryRole = "ROLE_CUSTOMER";
@@ -194,17 +250,70 @@ public class UserServiceImpl implements UserService {
         }
 
         return LoginResponse.builder()
-                .token("jwt-token-" + UUID.randomUUID())
+                .token(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .expiresIn(86400) // 24 giờ
                 .id(user.getId())
+                .userId(user.getId())
                 .username(user.getUsername())
                 .fullName(user.getFullName())
                 .email(user.getEmail())
+                .phoneNumber(user.getPhoneNumber())
                 .employeeCode(user.getEmployeeCode())
                 .branchName(user.getBranchName())
                 .roles(roleNames)
                 .primaryRole(primaryRole)
                 .defaultRoute(defaultRoute)
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public LoginResponse refreshToken(String refreshToken) {
+        if (!jwtTokenProvider.validateToken(refreshToken)) {
+            throw new BadCredentialsException("Refresh token không hợp lệ hoặc đã hết hạn!");
+        }
+
+        String tokenType = jwtTokenProvider.getTokenType(refreshToken);
+        if (!"REFRESH".equals(tokenType)) {
+            throw new BadCredentialsException("Token cung cấp không phải là refresh token!");
+        }
+
+        Long userId = jwtTokenProvider.getUserIdFromToken(refreshToken);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("Người dùng không tồn tại!"));
+
+        if (!"ACTIVE".equalsIgnoreCase(user.getStatus())) {
+            throw new RuntimeException("Tài khoản đang bị tạm khóa!");
+        }
+
+        String newAccessToken = jwtTokenProvider.generateAccessToken(user);
+        String newRefreshToken = jwtTokenProvider.generateRefreshToken(user);
+
+        Set<String> roleNames = user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
+
+        return LoginResponse.builder()
+                .token(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .tokenType("Bearer")
+                .expiresIn(86400)
+                .id(user.getId())
+                .userId(user.getId())
+                .username(user.getUsername())
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .roles(roleNames)
+                .primaryRole(roleNames.contains("ROLE_ADMIN") ? "ROLE_ADMIN" : "ROLE_CUSTOMER")
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserDTO getCurrentUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin người dùng với ID: " + userId));
+        return mapToDTO(user);
     }
 
     private UserDTO mapToDTO(User user) {
