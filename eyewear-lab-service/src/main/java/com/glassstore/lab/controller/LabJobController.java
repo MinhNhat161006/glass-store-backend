@@ -5,6 +5,8 @@ import com.glassstore.lab.dto.CreateLabJobRequest;
 import com.glassstore.lab.dto.LabJobResponse;
 import com.glassstore.lab.dto.UpdateJobStatusRequest;
 import com.glassstore.lab.entity.LabJobStatus;
+import com.glassstore.lab.entity.LabJobStatusHistory;
+import com.glassstore.lab.repository.LabJobStatusHistoryRepository;
 import com.glassstore.lab.service.LabJobService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/lab-jobs")
@@ -23,29 +26,43 @@ import java.util.List;
 public class LabJobController {
 
     private final LabJobService labJobService;
+    private final LabJobStatusHistoryRepository historyRepository;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<LabJobResponse>>> getLabJobs(
             @RequestParam(name = "status", required = false) LabJobStatus status) {
         log.info("API GET /api/lab-jobs - Lọc theo status: {}", status);
-        List<LabJobResponse> list = labJobService.getLabJobs(status);
-        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách lệnh gia công mài kính thành công", list));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Lấy danh sách lệnh gia công mài kính thành công", labJobService.getLabJobs(status)));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<LabJobResponse>> getLabJobById(@PathVariable("id") Long id) {
         log.info("API GET /api/lab-jobs/{}", id);
-        LabJobResponse job = labJobService.getLabJobById(id);
-        return ResponseEntity.ok(ApiResponse.success("Lấy chi tiết lệnh mài kính thành công", job));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Lấy chi tiết lệnh mài kính thành công", labJobService.getLabJobById(id)));
     }
 
-    @PatchMapping("/{id}/status")
-    public ResponseEntity<ApiResponse<LabJobResponse>> updateJobStatus(
-            @PathVariable("id") Long id,
-            @Valid @RequestBody UpdateJobStatusRequest request) {
-        log.info("API PATCH /api/lab-jobs/{}/status - Request: {}", id, request);
-        LabJobResponse updated = labJobService.updateJobStatus(id, request);
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái gia công QC thành công", updated));
+    @GetMapping("/{id}/history")
+    public ResponseEntity<ApiResponse<List<LabJobStatusHistory>>> history(@PathVariable("id") Long id) {
+        labJobService.getLabJobById(id);
+        return ResponseEntity.ok(ApiResponse.success(
+                "OK", historyRepository.findByLabJobIdOrderByChangedAtAsc(id)));
+    }
+
+    @PostMapping("/from-order")
+    public ResponseEntity<ApiResponse<LabJobResponse>> createFromOrder(
+            @RequestBody Map<String, Object> body) {
+        LabJobResponse job = labJobService.createFromOrder(
+                asLong(body.get("orderId")),
+                asLong(body.get("prescriptionId")),
+                asString(body.get("frameSku")),
+                asString(body.get("frameName")),
+                asString(body.get("lensSku")),
+                asString(body.get("lensName")),
+                asString(body.get("technicianName")));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Tạo lệnh gia công thành công", job));
     }
 
     @PostMapping
@@ -59,5 +76,28 @@ public class LabJobController {
                 .data(created)
                 .build();
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<ApiResponse<LabJobResponse>> updateJobStatus(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody UpdateJobStatusRequest request) {
+        log.info("API PATCH /api/lab-jobs/{}/status - Request: {}", id, request);
+        LabJobResponse updated = labJobService.updateJobStatus(id, request);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái gia công QC thành công", updated));
+    }
+
+    private Long asLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.valueOf(value.toString());
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : value.toString();
     }
 }

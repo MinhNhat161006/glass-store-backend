@@ -1,0 +1,61 @@
+package com.glassstore.order.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+/**
+ * Configured promotion record. Discount arithmetic only uses fields stored here
+ * (BR-19, BR-20). Stacking and per-customer caps are not encoded — see OQ-09.
+ */
+@Entity
+@Table(name = "vouchers", indexes = {
+        @Index(name = "idx_vouchers_code", columnList = "code", unique = true)
+})
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Voucher {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true, length = 60)
+    private String code;
+
+    @Column(nullable = false, length = 160)
+    private String name;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean active = true;
+
+    @Column(name = "valid_from")
+    private LocalDateTime validFrom;
+
+    @Column(name = "valid_to")
+    private LocalDateTime validTo;
+
+    @Column(name = "min_order_amount", precision = 14, scale = 2)
+    private BigDecimal minOrderAmount;
+
+    /** PERCENT or FIXED. */
+    @Column(name = "discount_type", nullable = false, length = 20)
+    private String discountType;
+
+    @Column(name = "discount_value", precision = 14, scale = 2, nullable = false)
+    private BigDecimal discountValue;
+
+    @Column(name = "max_discount_amount", precision = 14, scale = 2)
+    private BigDecimal maxDiscountAmount;
+
+    /** ONLINE, POS, or ALL. */
+    @Column(name = "channel", length = 20)
+    @Builder.Default
+    private String channel = "ALL";
+}

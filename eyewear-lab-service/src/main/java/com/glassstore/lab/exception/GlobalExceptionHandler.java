@@ -1,6 +1,8 @@
 package com.glassstore.lab.exception;
 
 import com.glassstore.common.dto.ApiResponse;
+import com.glassstore.common.exception.ApiException;
+import com.glassstore.common.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,19 @@ import java.util.Map;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ApiException.class)
+    public ResponseEntity<ApiResponse<Object>> handleApiException(ApiException ex) {
+        ErrorCode errorCode = ex.getErrorCode();
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .body(ApiResponse.<Object>builder()
+                        .code(errorCode.getCode())
+                        .message(ex.getMessage())
+                        .errorCode(errorCode.name())
+                        .data(ex.getDetails().isEmpty() ? null : ex.getDetails())
+                        .timestamp(java.time.LocalDateTime.now())
+                        .build());
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
@@ -48,4 +63,3 @@ public class GlobalExceptionHandler {
                         ex.getMessage() != null ? ex.getMessage() : "Lỗi hệ thống"));
     }
 }
-

@@ -23,6 +23,11 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        if (userRepository.count() > 0) {
+            log.info("Identity database đã có sẵn {} tài khoản người dùng từ MySQL, bỏ qua nạp seed DataInitializer.", userRepository.count());
+            return;
+        }
+
         log.info("Khởi tạo và đồng bộ seed data danh sách tài khoản hệ thống (Không sử dụng OTP)...");
 
         // 1. Roles
