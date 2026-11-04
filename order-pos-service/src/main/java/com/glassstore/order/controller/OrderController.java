@@ -33,7 +33,17 @@ public class OrderController {
     private final StockDeductionService stockDeductionService;
 
     @GetMapping
-    public ResponseEntity<List<Order>> getAllOrders() {
+    public ResponseEntity<List<Order>> getAllOrders(
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "channel", required = false) String channel) {
+        if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
+            if (channel != null && !channel.isBlank() && !"ALL".equalsIgnoreCase(channel)) {
+                return ResponseEntity.ok(orderRepository.findByStatusAndChannelOrderByCreatedAtDesc(status.toUpperCase(), channel.toUpperCase()));
+            }
+            return ResponseEntity.ok(orderRepository.findByStatusOrderByCreatedAtDesc(status.toUpperCase()));
+        } else if (channel != null && !channel.isBlank() && !"ALL".equalsIgnoreCase(channel)) {
+            return ResponseEntity.ok(orderRepository.findByChannelOrderByCreatedAtDesc(channel.toUpperCase()));
+        }
         return ResponseEntity.ok(orderRepository.findAllByOrderByCreatedAtDesc());
     }
 
@@ -147,9 +157,17 @@ public class OrderController {
             @PathVariable("id") Long id,
             @RequestBody Map<String, String> body) {
         return orderRepository.findById(id).map(o -> {
-            if (body.containsKey("status")) o.setStatus(body.get("status"));
+            if (body.containsKey("status") && body.get("status") != null && !body.get("status").isBlank()) {
+                String newStatus = body.get("status").trim().toUpperCase();
+                o.setStatus(newStatus);
+            }
+            if (body.containsKey("notes")) {
+                o.setNotes(body.get("notes"));
+            }
             o.setUpdatedAt(LocalDateTime.now());
-            return ResponseEntity.ok(orderRepository.save(o));
+            Order updated = orderRepository.save(o);
+            log.info("OMS: Cập nhật trạng thái đơn hàng ID={} (Mã {}) -> {}", updated.getId(), updated.getOrderCode(), updated.getStatus());
+            return ResponseEntity.ok(updated);
         }).orElse(ResponseEntity.notFound().build());
     }
 }

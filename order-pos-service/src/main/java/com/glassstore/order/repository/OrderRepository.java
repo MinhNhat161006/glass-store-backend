@@ -11,4 +11,7 @@ import java.util.Optional;
 public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByOrderCode(String orderCode);
     List<Order> findAllByOrderByCreatedAtDesc();
+    List<Order> findByStatusOrderByCreatedAtDesc(String status);
+    List<Order> findByChannelOrderByCreatedAtDesc(String channel);
+    List<Order> findByStatusAndChannelOrderByCreatedAtDesc(String status, String channel);
 }

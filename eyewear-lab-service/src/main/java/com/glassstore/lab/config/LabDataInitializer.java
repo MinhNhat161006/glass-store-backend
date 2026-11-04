@@ -2,8 +2,10 @@ package com.glassstore.lab.config;
 
 import com.glassstore.lab.entity.EyeExamAppointment;
 import com.glassstore.lab.entity.Prescription;
+import com.glassstore.lab.entity.Warranty;
 import com.glassstore.lab.repository.EyeExamAppointmentRepository;
 import com.glassstore.lab.repository.PrescriptionRepository;
+import com.glassstore.lab.repository.WarrantyRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -20,6 +22,7 @@ public class LabDataInitializer implements CommandLineRunner {
 
     private final PrescriptionRepository prescriptionRepository;
     private final EyeExamAppointmentRepository appointmentRepository;
+    private final WarrantyRepository warrantyRepository;
 
     @Override
     public void run(String... args) {
@@ -158,6 +161,64 @@ public class LabDataInitializer implements CommandLineRunner {
 
             prescriptionRepository.saveAll(List.of(rx1, rx2));
             log.info("Nạp seed data 2 toa kính mẫu thành công!");
+        }
+
+        // 3. Seed Thẻ bảo hành mẫu nếu chưa có
+        if (warrantyRepository.count() == 0) {
+            log.info("Nạp seed data bảo hành mẫu cho db_lab...");
+
+            // 3.1 Thẻ bảo hành Gọng kính Titanium Slimline
+            Warranty war1 = Warranty.builder()
+                    .warrantyCode("WAR-OPTI-9842")
+                    .originalOrderCode("ORD-2026-9842")
+                    .customerId(10L)
+                    .customerName("Nguyễn Hoàng Duy")
+                    .customerPhone("0918732998")
+                    .customerTier("VIP Diamond")
+                    .productName("Titanium Slimline Gold Edition")
+                    .productSku("FRM-BOLON-BLK")
+                    .productDetails("Hợp kim Titanium siêu nhẹ phủ mạ PVD Vàng Champagne cao cấp")
+                    .issueDescription("Kính bị lỏng ốc càng bên phải, xin nắn lại form ôm sát sống mũi")
+                    .claimType("FRAME_TECH")
+                    .policyRef("BR-35 (Bảo hành kết cấu 12 tháng)")
+                    .techNote("Kỹ thuật viên đã nắn chỉnh và siết ốc ren chống trượt.")
+                    .cost("0 đ (Miễn phí)")
+                    .techName("Nguyễn Văn Khoa (Lab Q.1)")
+                    .status("PROCESSING_COUNTER")
+                    .statusLabel("Đang thẩm định")
+                    .statusColor("#0284c7")
+                    .timeLabel("Hiệu lực 365 ngày (đến 15/10/2027)")
+                    .createdAt(LocalDateTime.now().minusDays(15))
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+
+            // 3.2 Thẻ bảo hành Tròng kính Crizal Prevencia 1.67
+            Warranty war2 = Warranty.builder()
+                    .warrantyCode("WAR-CRI-5510")
+                    .originalOrderCode("ORD-2026-9842")
+                    .customerId(10L)
+                    .customerName("Nguyễn Hoàng Duy")
+                    .customerPhone("0918732998")
+                    .customerTier("VIP Diamond")
+                    .productName("Crizal Prevencia 1.67 Aspheric")
+                    .productSku("LNS-CHEMI-160")
+                    .productDetails("Lọc ánh sáng xanh chọn lọc • Chống phản quang UV400 • Chống trầy xước chuẩn Pháp")
+                    .issueDescription("Mờ mắt sau 30 ngày sử dụng, kiểm tra lại tâm quang học")
+                    .claimType("RX_INSURANCE")
+                    .policyRef("Bảo hiểm đổi số độ khúc xạ 6 tháng")
+                    .techNote("Bác sĩ khúc xạ đã kiểm tra lại số độ OD/OS.")
+                    .cost("0 đ (Miễn phí)")
+                    .techName("BS. Lê Thị Ánh Tuyết")
+                    .status("LAB_APPROVED")
+                    .statusLabel("Đã duyệt xưởng")
+                    .statusColor("#10b981")
+                    .timeLabel("Hiệu lực 310 ngày (đến 15/04/2027)")
+                    .createdAt(LocalDateTime.now().minusDays(30))
+                    .updatedAt(LocalDateTime.now())
+                    .build();
+
+            warrantyRepository.saveAll(List.of(war1, war2));
+            log.info("Nạp xong 2 thẻ bảo hành mẫu điện tử chuẩn xác.");
         }
     }
 }

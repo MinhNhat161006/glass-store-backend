@@ -25,6 +25,14 @@ public class WarrantyController {
         return ResponseEntity.ok(warrantyRepository.findAllByOrderByCreatedAtDesc());
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<List<Warranty>> searchWarranties(@RequestParam(name = "q", required = false) String q) {
+        if (q == null || q.trim().isEmpty()) {
+            return ResponseEntity.ok(warrantyRepository.findAllByOrderByCreatedAtDesc());
+        }
+        return ResponseEntity.ok(warrantyRepository.search(q.trim()));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<Warranty> getWarrantyById(@PathVariable("id") Long id) {
         return warrantyRepository.findById(id)
@@ -43,6 +51,15 @@ public class WarrantyController {
     public ResponseEntity<Warranty> createWarranty(@RequestBody Warranty warranty) {
         if (warranty.getWarrantyCode() == null || warranty.getWarrantyCode().isEmpty()) {
             warranty.setWarrantyCode("#WAR-" + (System.currentTimeMillis() % 10000));
+        }
+        if (warranty.getStatus() == null || warranty.getStatus().isEmpty()) {
+            warranty.setStatus("WAITING_PROCESS");
+        }
+        if (warranty.getStatusLabel() == null || warranty.getStatusLabel().isEmpty()) {
+            warranty.setStatusLabel("Chờ tiếp nhận");
+        }
+        if (warranty.getStatusColor() == null || warranty.getStatusColor().isEmpty()) {
+            warranty.setStatusColor("#f59e0b");
         }
         warranty.setCreatedAt(LocalDateTime.now());
         warranty.setUpdatedAt(LocalDateTime.now());
