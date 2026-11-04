@@ -266,6 +266,8 @@ CREATE TABLE IF NOT EXISTS `prescriptions` (
     `os_add` DECIMAL(4, 2) DEFAULT 0.00,
     `pd` DECIMAL(4, 1) NOT NULL,         -- Khoảng cách đồng tử (mm)
     `notes` VARCHAR(500),
+    `lens_sku` VARCHAR(255),
+    `lens_name` VARCHAR(255),
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

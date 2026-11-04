@@ -36,7 +36,7 @@ public class PrescriptionController {
 
     @GetMapping("/customer/{customerId}")
     public ResponseEntity<ApiResponse<List<Prescription>>> getByCustomer(@PathVariable("customerId") Long customerId) {
-        List<Prescription> list = prescriptionRepository.findByCustomerIdOrderByCreatedAtDesc(customerId);
+        List<Prescription> list = prescriptionRepository.findByCustomerIdOrderByCreatedAtDescIdDesc(customerId);
         return ResponseEntity.ok(ApiResponse.success("Lấy lịch sử khúc xạ của khách hàng thành công", list));
     }
 

@@ -187,6 +187,15 @@ class StockTransferIntegrationTest {
         mockMvc.perform(get("/api/inventory")
                         .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_LAB"))))
                 .andExpect(status().isOk());
+        mockMvc.perform(get("/api/inventory")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_LAB_TECH"))))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/inventory")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_SALES_STAFF"))))
+                .andExpect(status().isOk());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/inventory/transfers")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_SALES_STAFF"))))
+                .andExpect(status().isForbidden());
     }
 
     private boolean receiveAfter(CountDownLatch start, Long transferId) throws Exception {

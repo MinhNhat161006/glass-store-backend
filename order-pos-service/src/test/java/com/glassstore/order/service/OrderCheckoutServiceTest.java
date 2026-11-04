@@ -2,7 +2,7 @@ package com.glassstore.order.service;
 
 import com.glassstore.common.exception.ApiException;
 import com.glassstore.common.exception.ErrorCode;
-import com.glassstore.order.client.LabClient;
+
 import com.glassstore.order.domain.OrderStatus;
 import com.glassstore.order.domain.PaymentMethod;
 import com.glassstore.order.domain.PaymentStatus;
@@ -33,7 +33,7 @@ class OrderCheckoutServiceTest {
     private BasketPricingService pricingService;
     private OrderStatusService orderStatusService;
     private OrderInventoryService inventoryService;
-    private LabClient labClient;
+    private LabDispatchService labDispatch;
     private WarrantyActivationService warrantyActivationService;
     private OrderCheckoutService service;
 
@@ -44,10 +44,10 @@ class OrderCheckoutServiceTest {
         pricingService = mock(BasketPricingService.class);
         orderStatusService = mock(OrderStatusService.class);
         inventoryService = mock(OrderInventoryService.class);
-        labClient = mock(LabClient.class);
+        labDispatch = mock(LabDispatchService.class);
         warrantyActivationService = mock(WarrantyActivationService.class);
         service = new OrderCheckoutService(orderRepository, paymentRepository, pricingService,
-                orderStatusService, inventoryService, labClient, warrantyActivationService);
+                orderStatusService, inventoryService, labDispatch, warrantyActivationService);
 
         when(orderRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
         when(orderRepository.findByOrderCode(any())).thenReturn(Optional.empty());

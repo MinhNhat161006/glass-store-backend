@@ -76,6 +76,20 @@ class WarrantyServiceTest {
     }
 
     @Test
+    void exchangePolicyExpiresThirtyDaysAfterTheActualPurchase() {
+        Warranty saved = Warranty.builder().id(9L).orderItemId(19L).benefitType("EXCHANGE_30_DAYS").build();
+        when(warrantyRepository.findByOrderItemIdAndBenefitType(19L,"EXCHANGE_30_DAYS"))
+                .thenReturn(Optional.empty(),Optional.of(saved));
+        service.activate(new WarrantyActivationRequest(5L,19L,"EXCHANGE_30_DAYS"));
+        var expiry = org.mockito.ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(warrantyRepository).insertIfMissing(
+                anyString(),eq("ORD-5"),eq(5L),eq(19L),eq("EXCHANGE_30_DAYS"),
+                any(LocalDateTime.class),expiry.capture(),eq("89300001"),eq(8L),eq("Khách hàng"),eq("0901234567"),eq("Lens coating"),
+                eq("LNS-COAT-1"),anyString(),eq("EXCHANGE_30_DAYS"),anyString(),anyString(),any(LocalDateTime.class),any(LocalDateTime.class));
+        assertThat(expiry.getValue()).isEqualTo(orderClient.getPurchaseItem(5L,19L).purchaseDate().plusDays(30));
+    }
+
+    @Test
     void rejectsBenefitThatDoesNotMatchPurchasedItem() {
         assertThatThrownBy(() -> service.activate(
                 new WarrantyActivationRequest(5L, 19L, "FRAME_ADJUSTMENT")))

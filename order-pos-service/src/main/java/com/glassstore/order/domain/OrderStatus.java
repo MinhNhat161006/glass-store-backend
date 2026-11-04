@@ -32,6 +32,8 @@ public enum OrderStatus {
     COMPLETED,
     /** Customer asked to cancel; awaiting decision. */
     CANCEL_REQUESTED,
+    /** POS cancellation is waiting for its inventory outbox acknowledgement. */
+    CANCEL_PENDING,
     /** Cancelled. */
     CANCELLED,
     /** Cancelled after payment; money not yet returned. */
@@ -45,7 +47,8 @@ public enum OrderStatus {
      */
     private static final Map<OrderStatus, Set<OrderStatus>> ALLOWED = Map.ofEntries(
             Map.entry(PENDING_PAYMENT, EnumSet.of(PAID, CANCELLED, CANCEL_REQUESTED)),
-            Map.entry(PAID, EnumSet.of(PENDING_CONFIRMATION, CONFIRMED, CANCEL_REQUESTED, REFUND_PENDING)),
+            Map.entry(PAID, EnumSet.of(PENDING_CONFIRMATION, CONFIRMED, CANCEL_REQUESTED, CANCEL_PENDING, REFUND_PENDING)),
+            Map.entry(CANCEL_PENDING, EnumSet.of(CANCELLED)),
             Map.entry(PENDING_CONFIRMATION, EnumSet.of(CONFIRMED, CANCEL_REQUESTED, REFUND_PENDING)),
             Map.entry(CONFIRMED, EnumSet.of(PREPARING, SHIPPING, READY_FOR_PICKUP, CANCEL_REQUESTED, REFUND_PENDING)),
             Map.entry(PREPARING, EnumSet.of(SHIPPING, READY_FOR_PICKUP, CANCEL_REQUESTED, REFUND_PENDING)),

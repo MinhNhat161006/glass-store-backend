@@ -78,7 +78,7 @@ public class Order {
 
     /** Order lifecycle only — see {@link PaymentStatus} for money state. */
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 30)
+    @Column(name = "status", nullable = false, length = 32, columnDefinition = "varchar(32)")
     @Builder.Default
     private OrderStatus status = OrderStatus.PENDING_PAYMENT;
 
@@ -97,11 +97,31 @@ public class Order {
     @Column(name = "prescription_id")
     private Long prescriptionId;
 
+    @Embedded
+    private OrderPrescription prescription;
+
     @Column(name = "staff_name", length = 120)
     private String staffName;
 
     @Column(name = "branch_name", length = 120)
     private String branchName;
+
+    private String branchCode;
+
+    private Long voucherId;
+    private BigDecimal voucherDiscount;
+    private Long pointsToUse;
+    private Long redeemedPoints;
+    private BigDecimal pointsDiscount;
+    private BigDecimal pointUnitValue;
+    private String cancelReason;
+    private String cancelledBy;
+    private LocalDateTime cancelledAt;
+    private String refundStatus;
+    private BigDecimal cashReceived;
+    private String refundConfirmedBy;
+    private LocalDateTime refundConfirmedAt;
+
 
     @Column(name = "notes", length = 1000)
     private String notes;

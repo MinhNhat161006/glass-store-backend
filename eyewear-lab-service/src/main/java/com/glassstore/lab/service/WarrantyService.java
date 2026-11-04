@@ -44,10 +44,11 @@ public class WarrantyService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime purchaseDate = item.purchaseDate() == null ? now : item.purchaseDate();
         boolean lensCoating = "LENS_COATING".equals(request.benefitType());
-        LocalDateTime expiresAt = lensCoating ? purchaseDate.plusDays(30) : null;
+        boolean exchange = "EXCHANGE_30_DAYS".equals(request.benefitType());
+        LocalDateTime expiresAt = lensCoating || exchange ? purchaseDate.plusDays(30) : null;
         String status = expiresAt != null && expiresAt.isBefore(now) ? "EXPIRED" : "ACTIVE";
         String statusLabel = "EXPIRED".equals(status) ? "Đã hết hạn" : "Đang hiệu lực";
-        String policy = lensCoating ? "LENS_COATING_30_DAYS" : "FRAME_ADJUSTMENT_LIFETIME";
+        String policy = exchange ? "EXCHANGE_30_DAYS" : lensCoating ? "LENS_COATING_30_DAYS" : "FRAME_ADJUSTMENT_LIFETIME";
 
         warrantyRepository.insertIfMissing(
                 "WAR-" + UUID.randomUUID(),
@@ -63,7 +64,8 @@ public class WarrantyService {
                 item.customerPhone(),
                 item.productName(),
                 item.productSku(),
-                lensCoating ? "Thay thế một lần khi lớp phủ tròng kính bong/tróc do lỗi thuộc phạm vi bảo hành"
+                exchange ? "Đổi 1–1 trong 30 ngày từ ngày mua, sau khi kiểm tra điều kiện bảo hành"
+                        : lensCoating ? "Thay thế một lần khi lớp phủ tròng kính bong/tróc do lỗi thuộc phạm vi bảo hành"
                         : "Hỗ trợ điều chỉnh gọng kính trọn đời",
                 policy,
                 status,
@@ -165,7 +167,8 @@ public class WarrantyService {
             return false;
         }
         String normalized = sku.trim().toUpperCase();
-        return ("FRAME_ADJUSTMENT".equals(benefitType) && normalized.startsWith("FRM-"))
+        return ("EXCHANGE_30_DAYS".equals(benefitType) && (normalized.startsWith("FRM-") || normalized.startsWith("LNS-") || normalized.startsWith("LZ-")))
+                || ("FRAME_ADJUSTMENT".equals(benefitType) && normalized.startsWith("FRM-"))
                 || ("LENS_COATING".equals(benefitType)
                 && (normalized.startsWith("LNS-") || normalized.startsWith("LZ-")));
     }

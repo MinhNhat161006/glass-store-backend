@@ -1,7 +1,8 @@
 package com.glassstore.order.service;
+import com.glassstore.order.domain.OrderStatus;
+import com.glassstore.order.domain.SalesChannel;
 
 import com.glassstore.order.client.CatalogInventoryClient;
-import com.glassstore.order.domain.PaymentStatus;
 import com.glassstore.order.dto.CatalogStockDeductionResponse;
 import com.glassstore.order.entity.Order;
 import com.glassstore.order.entity.OrderItem;
@@ -27,6 +28,17 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class StockDeductionServiceTest {
+    @Test
+    void retrySyncedOrderDoesNotDeductAgainOrChangeBranch() {
+        Order order = Order.builder().id(90L).channel(SalesChannel.POS).status(OrderStatus.PAID).branchCode("BRANCH_01").build();
+        StockDeductionOutbox outbox = StockDeductionOutbox.builder().orderId(90L).status("SYNCED").build();
+        when(orderRepository.lockById(90L)).thenReturn(Optional.of(order));
+        when(outboxRepository.findByOrderId(90L)).thenReturn(Optional.of(outbox));
+        assertEquals("SYNCED", stockDeductionService.retry(90L, "BRANCH_02").getInventorySyncStatus());
+        assertEquals("BRANCH_01", order.getBranchCode());
+        verifyNoInteractions(catalogInventoryClient, eventPublisher, paymentRepository);
+        verify(outboxRepository, never()).save(any());
+    }
 
     @Mock
     private StockDeductionOutboxRepository outboxRepository;
@@ -42,42 +54,11 @@ class StockDeductionServiceTest {
     @InjectMocks
     private StockDeductionService stockDeductionService;
 
-    @Test
-    void successfulPaymentOutboxSendsOrderItemsAndMarksOrderSynced() {
-        Order order = Order.builder()
-                .id(42L)
-                .branchName("Chi nhánh 01 - Lê Thánh Tôn")
-                .items(List.of(OrderItem.builder().skuId("FRAME-001").quantity(2).build()))
-                .build();
-        Payment payment = Payment.builder()
-                .orderId(42L)
-                .idempotencyKey("pos-request-42")
-                .transactionCode("TXN-42")
-                .status(PaymentStatus.SUCCESS)
-                .build();
-        StockDeductionOutbox outbox = StockDeductionOutbox.builder()
-                .id(7L)
-                .orderId(42L)
-                .idempotencyKey("pos-request-42")
-                .status("PENDING")
-                .attempts(0)
-                .build();
-
-        when(outboxRepository.findById(7L)).thenReturn(Optional.of(outbox));
-        when(orderRepository.findById(42L)).thenReturn(Optional.of(order));
-        when(paymentRepository.findByOrderId(42L)).thenReturn(List.of(payment));
-        when(catalogInventoryClient.deductPaidOrder(any()))
-                .thenReturn(new CatalogStockDeductionResponse(42L, "BRANCH_01", false));
-
-        stockDeductionService.processAfterCommit(new StockDeductionRequestedEvent(7L, order));
-
-        assertEquals("SYNCED", order.getInventorySyncStatus());
-        assertEquals("SYNCED", outbox.getStatus());
-        ArgumentCaptor<com.glassstore.order.dto.CatalogStockDeductionRequest> requestCaptor =
-                ArgumentCaptor.forClass(com.glassstore.order.dto.CatalogStockDeductionRequest.class);
-        verify(catalogInventoryClient).deductPaidOrder(requestCaptor.capture());
-        assertEquals(42L, requestCaptor.getValue().orderId());
-        assertEquals("FRAME-001", requestCaptor.getValue().items().get(0).sku());
-        verify(outboxRepository).save(outbox);
+    @Mock private StockOutboxWorker worker;
+    @Test void afterCommitDelegatesToTransactionalWorker() {
+        Order order=Order.builder().id(42L).status(OrderStatus.PAID).build();
+        when(worker.process(7L)).thenReturn("SYNCED");
+        stockDeductionService.processAfterCommit(new StockDeductionRequestedEvent(7L,order));
+        assertEquals("SYNCED",order.getInventorySyncStatus());verify(worker).process(7L);
     }
 }

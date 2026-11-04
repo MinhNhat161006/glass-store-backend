@@ -2,11 +2,11 @@ package com.glassstore.order.service;
 
 import com.glassstore.common.exception.ApiException;
 import com.glassstore.common.exception.ErrorCode;
-import com.glassstore.order.client.LabClient;
 import com.glassstore.order.domain.*;
 import com.glassstore.order.dto.OrderDtos;
 import com.glassstore.order.entity.Order;
 import com.glassstore.order.entity.OrderItem;
+import com.glassstore.order.entity.OrderPrescription;
 import com.glassstore.order.entity.Payment;
 import com.glassstore.order.repository.OrderRepository;
 import com.glassstore.order.repository.PaymentRepository;
@@ -41,7 +41,7 @@ public class OrderCheckoutService {
     private final BasketPricingService pricingService;
     private final OrderStatusService orderStatusService;
     private final OrderInventoryService inventoryService;
-    private final LabClient labClient;
+    private final LabDispatchService labDispatch;
     private final WarrantyActivationService warrantyActivationService;
 
     @Transactional
@@ -70,7 +70,13 @@ public class OrderCheckoutService {
                     "Giá sản phẩm đã thay đổi. Vui lòng xác nhận giá mới trước khi đặt hàng.", details);
         }
 
-        if (orderType.requiresPrescription() && request.getPrescriptionId() == null) {
+        if (request.getPrescription() != null && request.getPrescriptionId() != null) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Chỉ chọn một nguồn thông số toa kính");
+        }
+        if (request.getPrescription() != null && !request.getPrescription().isConfirmed()) {
+            throw ApiException.of(ErrorCode.PRESCRIPTION_INCOMPLETE, "Vui lòng xác nhận thông số đã cung cấp");
+        }
+        if (orderType.requiresPrescription() && request.getPrescriptionId() == null && request.getPrescription() == null) {
             throw ApiException.of(ErrorCode.PRESCRIPTION_INCOMPLETE,
                     "Đơn kính thuốc bắt buộc phải có toa kính đã được xác nhận");
         }
@@ -109,6 +115,14 @@ public class OrderCheckoutService {
                 .posSessionId(request.getPosSessionId())
                 .invoiceNumber(channel == SalesChannel.POS ? "INV-" + orderCode : null)
                 .build();
+
+        if (request.getPrescription() != null) {
+            var rx = request.getPrescription();
+            order.setPrescription(OrderPrescription.builder()
+                    .odSph(rx.getOdSph()).odCyl(rx.getOdCyl()).odAxis(rx.getOdAxis()).odAdd(rx.getOdAdd())
+                    .osSph(rx.getOsSph()).osCyl(rx.getOsCyl()).osAxis(rx.getOsAxis()).osAdd(rx.getOsAdd())
+                    .pd(rx.getPd()).source("CUSTOMER_PROVIDED").customerConfirmedAt(LocalDateTime.now()).build());
+        }
 
         for (OrderDtos.OrderItemSnapshot line : basket.getLines()) {
             order.getItems().add(OrderItem.builder()
@@ -197,38 +211,7 @@ public class OrderCheckoutService {
     }
 
     public void dispatchLabJobIfNeeded(Order order) {
-        if (order.getPrescriptionId() == null || order.getOrderType() == null
-                || !order.getOrderType().requiresPrescription()) {
-            return;
-        }
-        try {
-            String frameSku = null;
-            String frameName = null;
-            String lensSku = null;
-            String lensName = null;
-            for (OrderItem item : order.getItems()) {
-                String sku = item.getSkuId() == null ? "" : item.getSkuId().toUpperCase();
-                if (sku.startsWith("LNS-") || sku.startsWith("LZ-")) {
-                    lensSku = item.getSkuId();
-                    lensName = item.getProductName();
-                } else {
-                    frameSku = item.getSkuId();
-                    frameName = item.getProductName();
-                }
-            }
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("orderId", order.getId());
-            body.put("prescriptionId", order.getPrescriptionId());
-            body.put("frameSku", frameSku);
-            body.put("frameName", frameName);
-            body.put("lensSku", lensSku);
-            body.put("lensName", lensName);
-            body.put("technicianName", order.getStaffName());
-            labClient.createFromOrder(body);
-            log.info("Dispatched lab job for order {}", order.getOrderCode());
-        } catch (Exception ex) {
-            log.error("Could not create lab job for order {}: {}", order.getOrderCode(), ex.getMessage());
-        }
+        labDispatch.enqueue(order);
     }
 
     private String requireIdempotencyKey(String key) {
