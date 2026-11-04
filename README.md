@@ -189,11 +189,13 @@ Base URL Gateway: `http://localhost:8080`
 | `GET` | `/api/inventory` | Tồn từng SKU theo ba địa điểm |
 | `GET` | `/api/inventory/locations` | Danh sách địa điểm |
 | `GET` | `/api/inventory/transfers` | Danh sách phiếu điều chuyển |
-| `POST` | `/api/inventory/transfers` | Tạo phiếu chờ xuất, nguồn cố định là LAB |
-| `PATCH` | `/api/inventory/transfers/{id}/dispatch` | Kiểm tra nguyên tử và trừ tồn LAB, chuyển sang `IN_TRANSIT` |
-| `PATCH` | `/api/inventory/transfers/{id}/receive` | Cộng tồn chi nhánh và chuyển sang `RECEIVED` |
+| `GET` | `/api/inventory/movements` | Tra cứu lịch sử biến động (lọc tùy chọn theo SKU, địa điểm, mã tham chiếu; tối đa 100 dòng/trang) |
+| `POST` | `/api/inventory/transfers` | Tạo phiếu `PENDING` với kho nguồn, kho đích và các SKU |
+| `PATCH` | `/api/inventory/transfers/{id}/receive` | Xác nhận nhận hàng và cập nhật cả hai kho nguyên tử |
 
-Tạo phiếu chưa làm thay đổi tồn; việc xuất kho kiểm tra lại số dư bằng câu lệnh cập nhật có điều kiện trong database. Chỉ phiếu `IN_TRANSIT` mới nhận được; các bước cập nhật tồn, trạng thái và lịch sử biến động nằm trong transaction catalog. Lịch sử được lưu trong bảng `inventory_movements`.
+Tạo phiếu không giữ hàng và chưa làm thay đổi tồn. Khi nhận phiếu `PENDING`, catalog kiểm tra lại số dư nguồn bằng câu lệnh cập nhật có điều kiện, trừ kho nguồn, cộng kho đích, cập nhật trạng thái và ghi lịch sử xuất/nhập trong cùng transaction. Khóa phiếu ngăn xác nhận đồng thời hoặc lặp lại. JWT và vai trò `ROLE_ADMIN`/`ROLE_LAB` bảo vệ các API inventory, tương ứng với quyền của route `/stock-transfer` trên portal. Hệ thống hiện chưa có phân quyền theo từng chi nhánh, nên các vai trò được phép thấy các địa điểm đang hoạt động.
+
+Các bản ghi `IN_TRANSIT` đã tạo theo luồng GS-23 cũ vẫn nhận được: vì tồn nguồn đã bị trừ khi xuất, bước nhận chỉ cộng kho đích và đồng bộ lại tổng tồn SKU, không trừ nguồn lần nữa. API `dispatch` cũ không còn được dùng cho phiếu mới. Lịch sử địa điểm được lưu trong `inventory_movements` và có thể tra cứu qua endpoint ở trên.
 
 POS gửi `Idempotency-Key` cho `POST /api/orders`. `order-pos-service` gọi endpoint nội bộ `POST /internal/inventory/sales/deduct` trên cổng nội bộ của catalog-service; endpoint này không được định tuyến qua API Gateway. Địa điểm bán được xác định từ nhãn chi nhánh hiện tại; nhãn không khớp địa điểm đã hỗ trợ bị từ chối, không trừ vào kho mặc định.
 

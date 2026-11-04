@@ -2,6 +2,7 @@ package com.glassstore.catalog.controller;
 
 import com.glassstore.catalog.dto.CreateStockTransferRequest;
 import com.glassstore.catalog.dto.InventoryLocationDTO;
+import com.glassstore.catalog.dto.InventoryMovementDTO;
 import com.glassstore.catalog.dto.InventoryRowDTO;
 import com.glassstore.catalog.dto.StockDeductionRequest;
 import com.glassstore.catalog.dto.StockDeductionResponse;
@@ -16,7 +17,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -91,26 +96,52 @@ public class InventoryController {
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách phiếu điều chuyển thành công", inventoryService.getTransfers()));
     }
 
-    @PostMapping("/api/inventory/transfers")
-    public ResponseEntity<ApiResponse<StockTransferDTO>> createTransfer(
-            @Valid @RequestBody CreateStockTransferRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo phiếu điều chuyển thành công", inventoryService.createTransfer(request)));
+    @GetMapping("/api/inventory/movements")
+    public ResponseEntity<ApiResponse<Page<InventoryMovementDTO>>> getMovements(
+            @RequestParam(required = false) String sku,
+            @RequestParam(required = false) String locationCode,
+            @RequestParam(required = false) String referenceId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        return ResponseEntity.ok(ApiResponse.success("Lấy lịch sử biến động kho thành công",
+                inventoryService.getMovements(sku, locationCode, referenceId, page, size)));
     }
 
-    @PatchMapping("/api/inventory/transfers/{id}/dispatch")
-    public ResponseEntity<ApiResponse<StockTransferDTO>> dispatchTransfer(@PathVariable("id") Long id) {
-        return ResponseEntity.ok(ApiResponse.success("Xuất kho điều chuyển thành công", inventoryService.dispatchTransfer(id)));
+    @PostMapping("/api/inventory/transfers")
+    public ResponseEntity<ApiResponse<StockTransferDTO>> createTransfer(
+            @Valid @RequestBody CreateStockTransferRequest request,
+            @AuthenticationPrincipal Jwt principal) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Tạo phiếu điều chuyển thành công",
+                        inventoryService.createTransfer(request, actorFrom(principal))));
     }
 
     @PatchMapping("/api/inventory/transfers/{id}/receive")
-    public ResponseEntity<ApiResponse<StockTransferDTO>> receiveTransfer(@PathVariable("id") Long id) {
-        return ResponseEntity.ok(ApiResponse.success("Xác nhận nhận hàng thành công", inventoryService.receiveTransfer(id)));
+    public ResponseEntity<ApiResponse<StockTransferDTO>> receiveTransfer(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal Jwt principal) {
+        return ResponseEntity.ok(ApiResponse.success("Xác nhận nhận hàng thành công",
+                inventoryService.receiveTransfer(id, actorFrom(principal))));
     }
 
     @PostMapping("/internal/inventory/sales/deduct")
     public ResponseEntity<StockDeductionResponse> deductPaidOrder(
             @Valid @RequestBody StockDeductionRequest request) {
         return ResponseEntity.ok(inventoryService.deductPaidOrder(request));
+    }
+
+    private String actorFrom(Jwt principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Yêu cầu xác thực nhân viên.");
+        }
+        String username = principal.getClaimAsString("username");
+        if (username != null && !username.isBlank()) {
+            return username;
+        }
+        String subject = principal.getSubject();
+        if (subject == null || subject.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token nhân viên không có định danh hợp lệ.");
+        }
+        return subject;
     }
 }

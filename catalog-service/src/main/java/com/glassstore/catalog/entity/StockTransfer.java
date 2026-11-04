@@ -34,6 +34,12 @@ public class StockTransfer {
     @Column(length = 500)
     private String reason;
 
+    @Column(name = "created_by", length = 100)
+    private String createdBy;
+
+    @Column(name = "received_by", length = 100)
+    private String receivedBy;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 24)
     @Builder.Default
