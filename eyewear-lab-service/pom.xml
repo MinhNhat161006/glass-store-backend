@@ -37,6 +37,11 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
         <!-- Bean Validation for request payloads (jakarta.validation annotations). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

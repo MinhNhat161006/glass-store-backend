@@ -1,6 +1,12 @@
 server:
   port: 8084
 
+services:
+  order-pos-service:
+    url: ${ORDER_POS_SERVICE_URL:http://localhost:8083}
+  catalog-service:
+    url: ${CATALOG_SERVICE_URL:http://localhost:8082}
+
 spring:
   application:
     name: eyewear-lab-service

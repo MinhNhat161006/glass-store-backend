@@ -42,6 +42,7 @@ public class OrderCheckoutService {
     private final OrderStatusService orderStatusService;
     private final OrderInventoryService inventoryService;
     private final LabClient labClient;
+    private final WarrantyActivationService warrantyActivationService;
 
     @Transactional
     public CheckoutOutcome checkout(OrderDtos.CheckoutRequest request, String idempotencyKey) {
@@ -190,6 +191,7 @@ public class OrderCheckoutService {
         OrderStatus previous = order.currentStatus();
         Order paid = orderStatusService.transition(order, OrderStatus.PAID, actor, reason);
         inventoryService.onStatusChanged(paid, previous, OrderStatus.PAID);
+        warrantyActivationService.enqueueForPaidOrder(paid);
         dispatchLabJobIfNeeded(paid);
         return paid;
     }

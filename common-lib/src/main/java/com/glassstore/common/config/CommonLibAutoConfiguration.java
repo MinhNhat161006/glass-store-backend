@@ -12,9 +12,9 @@ import org.springframework.context.annotation.Bean;
 @AutoConfiguration
 public class CommonLibAutoConfiguration {
 
-    @Bean
-    @ConditionalOnMissingBean
-    public GlobalExceptionHandler globalExceptionHandler() {
+    @Bean(name = "commonGlobalExceptionHandler")
+    @ConditionalOnMissingBean(name = "commonGlobalExceptionHandler")
+    public GlobalExceptionHandler commonGlobalExceptionHandler() {
         return new GlobalExceptionHandler();
     }
 }
