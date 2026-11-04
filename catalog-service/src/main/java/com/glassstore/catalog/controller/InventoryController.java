@@ -8,6 +8,7 @@ import com.glassstore.catalog.dto.StockDeductionRequest;
 import com.glassstore.catalog.dto.StockDeductionResponse;
 import com.glassstore.catalog.dto.StockTransferDTO;
 import com.glassstore.catalog.dto.StockDtos;
+import com.glassstore.catalog.dto.StockCheckRequest;
 import com.glassstore.catalog.dto.VariantInfoDTO;
 import com.glassstore.catalog.service.InventoryQueryService;
 import com.glassstore.catalog.service.InventoryService;
@@ -35,6 +36,18 @@ import java.util.List;
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class InventoryController {
+
+    @PostMapping("/internal/inventory/sales/check")
+    public ResponseEntity<Void> checkAvailability(@Valid @RequestBody StockCheckRequest request) {
+        inventoryService.checkAvailability(request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/internal/inventory/sales/cancel")
+    public ResponseEntity<Void> cancelSale(@Valid @RequestBody StockDeductionRequest request) {
+        inventoryService.cancelSale(request);
+        return ResponseEntity.noContent().build();
+    }
 
     private final InventoryQueryService queryService;
     private final StockService stockService;

@@ -14,6 +14,11 @@ import com.glassstore.order.repository.PaymentRepository;
 import com.glassstore.order.service.OrderCheckoutService;
 import com.glassstore.order.service.OrderStatusService;
 import jakarta.validation.Valid;
+import com.glassstore.order.service.OrderService;
+import com.glassstore.order.service.OrderCancellationService;
+import com.glassstore.order.service.StockDeductionService;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +40,9 @@ import java.util.UUID;
 @CrossOrigin(origins = "*")
 public class OrderController {
 
+    private final OrderService posOrderService;
+    private final OrderCancellationService posCancellations;
+    private final StockDeductionService stockDeductionService;
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final OrderStatusHistoryRepository historyRepository;
@@ -59,6 +67,7 @@ public class OrderController {
             @RequestHeader(value = "X-Customer-Id", required = false) Long customerId) {
         Order order = requireOrder(id);
         assertOwner(order, customerId);
+        order.setInventorySyncStatus(stockDeductionService.statusForOrder(order.getId()));
         return ResponseEntity.ok(ApiResponse.success("OK", order));
     }
 
@@ -94,10 +103,15 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<ApiResponse<Order>> createOrder(
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @Valid @RequestBody OrderDtos.CheckoutRequest request) {
+            @Valid @RequestBody OrderDtos.CheckoutRequest request,
+            @RequestHeader(value = "Authorization", required = false) String token) {
 
         prepareCounterSale(request);
         SalesChannel channel = SalesChannel.parse(request.getChannel());
+        if (channel == SalesChannel.POS) {
+            ResponseEntity<Order> result = posOrderService.createCounterSale(request, idempotencyKey, token);
+            return ResponseEntity.status(result.getStatusCode()).body(ApiResponse.success("Thanh toán tại quầy", result.getBody()));
+        }
         String key = idempotencyKey;
         if ((key == null || key.isBlank()) && channel == SalesChannel.POS) {
             key = "POS-" + UUID.randomUUID();
@@ -159,8 +173,40 @@ public class OrderController {
             throw com.glassstore.common.exception.ApiException.of(
                     com.glassstore.common.exception.ErrorCode.VALIDATION_ERROR, ex.getMessage());
         }
+        if (order.getBranchCode() != null && (target == OrderStatus.CANCELLED
+                || target == OrderStatus.CANCEL_PENDING || target == OrderStatus.REFUND_PENDING
+                || target == OrderStatus.REFUNDED || target == OrderStatus.CANCEL_REQUESTED)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Hãy dùng API hủy đơn tại quầy để hoàn kho và quyền lợi.");
+        }
         Order updated = orderStatusService.transition(order, target, body.getActor(), body.getReason());
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái đơn hàng thành công", updated));
+    }
+
+
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<ApiResponse<Order>> cancelCounterSale(@PathVariable("id") Long id,
+            @RequestBody OrderCancellationService.Request request,
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        return ResponseEntity.ok(ApiResponse.success("Hủy đơn tại quầy", posCancellations.cancel(id, request, token)));
+    }
+
+    @PostMapping("/{id}/refund-confirm")
+    public ResponseEntity<ApiResponse<Order>> confirmCounterRefund(@PathVariable("id") Long id,
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        return ResponseEntity.ok(ApiResponse.success("Xác nhận hoàn tiền", posCancellations.confirmRefund(id, token)));
+    }
+
+    @PostMapping("/{id}/inventory/retry")
+    public ResponseEntity<ApiResponse<Order>> retryInventory(@PathVariable("id") Long id,
+            @RequestBody(required = false) Map<String, String> body) {
+        return ResponseEntity.ok(ApiResponse.success("Đồng bộ kho",
+                stockDeductionService.retry(id, body == null ? null : body.get("branchCode"))));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, String>> businessError(ResponseStatusException error) {
+        return ResponseEntity.status(error.getStatusCode()).body(Map.of("message",
+                error.getReason() == null ? "Yêu cầu không hợp lệ." : error.getReason()));
     }
 
     private Order requireOrder(Long id) {
@@ -188,6 +234,13 @@ public class OrderController {
             return;
         }
         request.setAcceptPriceChange(true);
+        java.util.Set<Long> linePrescriptions = new java.util.HashSet<>();
+        if (request.getPrescriptionId() != null) linePrescriptions.add(request.getPrescriptionId());
+        if (request.getItems() != null) request.getItems().stream().map(OrderDtos.CheckoutLine::getPrescriptionId)
+                .filter(java.util.Objects::nonNull).forEach(linePrescriptions::add);
+        if (linePrescriptions.size() > 1) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Mỗi đơn POS chỉ liên kết một toa kính. Vui lòng tách đơn cho các toa khác nhau.");
+        if (!linePrescriptions.isEmpty()) request.setPrescriptionId(linePrescriptions.iterator().next());
         if (request.getCustomerName() == null || request.getCustomerName().isBlank()) {
             request.setCustomerName("Khách vãng lai");
         }

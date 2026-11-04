@@ -34,6 +34,8 @@ public class OrderCancellationController {
     private final PaymentRepository paymentRepository;
     private final OrderStatusService orderStatusService;
     private final OrderInventoryService inventoryService;
+    private final com.glassstore.order.repository.StockDeductionOutboxRepository stockOutboxes;
+    private final com.glassstore.order.service.OrderCancellationService posCancellations;
 
     /** Customer asks to cancel; staff must still approve. */
     @PostMapping("/{id}/cancel-request")
@@ -42,6 +44,9 @@ public class OrderCancellationController {
             @RequestBody(required = false) OrderDtos.CancelRequest body) {
 
         Order order = requireOrder(id);
+        if (stockOutboxes.findByOrderId(id).isPresent()) {
+            throw ApiException.of(ErrorCode.ORDER_NOT_CANCELLABLE, "Đơn POS cần hủy qua luồng hoàn kho tại quầy");
+        }
         OrderStatus current = order.currentStatus();
         OrderStateMachine.requireCustomerCancellable(current);
 
@@ -58,9 +63,15 @@ public class OrderCancellationController {
     public ResponseEntity<ApiResponse<Order>> cancel(
             @PathVariable("id") Long id,
             @RequestParam(name = "actor", required = false) String actor,
-            @RequestBody(required = false) OrderDtos.CancelRequest body) {
+            @RequestBody(required = false) OrderDtos.CancelRequest body,
+            @RequestHeader(value = "Authorization", required = false) String token) {
 
         Order order = requireOrder(id);
+        if (stockOutboxes.findByOrderId(id).isPresent()) {
+            String reason = body == null ? null : body.getReason();
+            return ResponseEntity.ok(ApiResponse.success("Hủy đơn tại quầy",
+                    posCancellations.cancel(id, new com.glassstore.order.service.OrderCancellationService.Request(reason, false), token)));
+        }
         OrderStatus current = order.currentStatus();
         OrderStateMachine.requireStaffCancellable(current);
 

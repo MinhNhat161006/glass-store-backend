@@ -58,4 +58,27 @@ public class Voucher {
     @Column(name = "channel", length = 20)
     @Builder.Default
     private String channel = "ALL";
+
+    @Builder.Default
+    private boolean membersOnly = false;
+    @Builder.Default
+    private boolean stackPoints = true;
+    private Integer usageLimit;
+    private Integer perCustomerLimit;
+    @Builder.Default
+    private int usedCount = 0;
+
+    // POS names share the same persisted fields as the online voucher contract.
+    public String getType() { return discountType; }
+    public void setType(String type) { this.discountType = type; }
+    public BigDecimal getAmount() { return discountValue; }
+    public void setAmount(BigDecimal amount) { this.discountValue = amount; }
+    public BigDecimal getMinimumAmount() { return minOrderAmount == null ? BigDecimal.ZERO : minOrderAmount; }
+    public void setMinimumAmount(BigDecimal minimum) { this.minOrderAmount = minimum; }
+    public BigDecimal getMaximumDiscount() { return maxDiscountAmount; }
+    public void setMaximumDiscount(BigDecimal maximum) { this.maxDiscountAmount = maximum; }
+    public LocalDateTime getStartsAt() { return validFrom; }
+    public void setStartsAt(LocalDateTime start) { this.validFrom = start; }
+    public LocalDateTime getExpiresAt() { return validTo; }
+    public void setExpiresAt(LocalDateTime expiry) { this.validTo = expiry; }
 }

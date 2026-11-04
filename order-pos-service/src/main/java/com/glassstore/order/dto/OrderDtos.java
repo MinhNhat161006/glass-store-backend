@@ -31,6 +31,8 @@ public final class OrderDtos {
          * customer to confirm (EX-ORD-02); it is never used as the charged amount.
          */
         private BigDecimal expectedUnitPrice;
+        private String productName;
+        private Long prescriptionId;
     }
 
     @Data
@@ -66,6 +68,10 @@ public final class OrderDtos {
         private String staffName;
 
         private String branchName;
+
+        private String branchCode;
+        private Long pointsToUse;
+        private BigDecimal cashReceived;
 
         private String notes;
 

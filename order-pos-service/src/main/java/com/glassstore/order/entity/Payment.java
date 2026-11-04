@@ -40,7 +40,7 @@ public class Payment {
     private PaymentMethod paymentMethod;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 32, columnDefinition = "varchar(32)")
     @Builder.Default
     private PaymentStatus status = PaymentStatus.PENDING;
 
