@@ -34,6 +34,7 @@ class OrderCheckoutServiceTest {
     private OrderStatusService orderStatusService;
     private OrderInventoryService inventoryService;
     private LabClient labClient;
+    private WarrantyActivationService warrantyActivationService;
     private OrderCheckoutService service;
 
     @BeforeEach
@@ -44,8 +45,9 @@ class OrderCheckoutServiceTest {
         orderStatusService = mock(OrderStatusService.class);
         inventoryService = mock(OrderInventoryService.class);
         labClient = mock(LabClient.class);
+        warrantyActivationService = mock(WarrantyActivationService.class);
         service = new OrderCheckoutService(orderRepository, paymentRepository, pricingService,
-                orderStatusService, inventoryService, labClient);
+                orderStatusService, inventoryService, labClient, warrantyActivationService);
 
         when(orderRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
         when(orderRepository.findByOrderCode(any())).thenReturn(Optional.empty());

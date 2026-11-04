@@ -327,7 +327,7 @@ CREATE TABLE IF NOT EXISTS `orders` (
     `total_amount` DECIMAL(12, 2) NOT NULL,
     `discount_amount` DECIMAL(12, 2) DEFAULT 0.00,
     `final_amount` DECIMAL(12, 2) NOT NULL,
-    `status` ENUM('PENDING_PAYMENT', 'PAID', 'PROCESSING', 'SHIPPING', 'COMPLETED', 'CANCELLED') DEFAULT 'PAID',
+    `status` VARCHAR(30) NOT NULL DEFAULT 'PAID',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -358,16 +358,16 @@ CREATE TABLE IF NOT EXISTS `payments` (
 -- Nạp 6 Đơn hàng đa kênh thực tế (Theo Bảng 7 SRS: Kênh Online & POS Cửa hàng)
 INSERT INTO `orders` (`id`, `order_code`, `customer_id`, `customer_name`, `customer_phone`, `shipping_address`, `channel`, `order_type`, `total_amount`, `discount_amount`, `final_amount`, `status`) VALUES
 -- 1. Đơn POS Flagship Q.1 - Khách Nguyễn Hoàng Duy
-(1001, 'OPT-8842-SG', 10, 'Nguyễn Hoàng Duy', '0918732998', '120 Hai Bà Trưng, P. Đa Kao, Q.1, TP.HCM', 'POS', 'COMPLETE_GLASSES', 5230000, 0, 5230000, 'PROCESSING'),
+(1001, 'OPT-8842-SG', 10, 'Nguyễn Hoàng Duy', '0918732998', '120 Hai Bà Trưng, P. Đa Kao, Q.1, TP.HCM', 'POS', 'COMPLETE_GLASSES', 5230000, 0, 5230000, 'PREPARING'),
 
 -- 2. Đơn Online App - Khách Lê Thúy Kiều
 (1002, 'OPT-8841-ONL', 11, 'Lê Thúy Kiều', '0988124551', '45 Lê Duẩn, P. Bến Nghé, Q.1, TP.HCM', 'ONLINE', 'COMPLETE_GLASSES', 4750000, 630000, 4120000, 'SHIPPING'),
 
 -- 3. Đơn Web E-Com - Khách Trịnh Minh Quang
-(1003, 'OPT-8839-WEB', 12, 'Trịnh Minh Quang', '0912449002', '88 Nguyễn Đình Chiểu, Q.3, TP.HCM', 'ONLINE', 'COMPLETE_GLASSES', 6850000, 0, 6850000, 'PROCESSING'),
+(1003, 'OPT-8839-WEB', 12, 'Trịnh Minh Quang', '0912449002', '88 Nguyễn Đình Chiểu, Q.3, TP.HCM', 'ONLINE', 'COMPLETE_GLASSES', 6850000, 0, 6850000, 'PREPARING'),
 
 -- 4. Đơn POS Tràng Tiền Plaza HN - Khách Phạm Thị Bích Ngọc
-(1004, 'OPT-8835-HN', 13, 'Phạm Thị Bích Ngọc', '0977898332', '24 Tràng Tiền, Hoàn Kiếm, Hà Nội', 'POS', 'COMPLETE_GLASSES', 12500000, 0, 12500000, 'PROCESSING'),
+(1004, 'OPT-8835-HN', 13, 'Phạm Thị Bích Ngọc', '0977898332', '24 Tràng Tiền, Hoàn Kiếm, Hà Nội', 'POS', 'COMPLETE_GLASSES', 12500000, 0, 12500000, 'PREPARING'),
 
 -- 5. Đơn Online App - Khách Đỗ Tuấn Kiệt (Kính mát Oakley)
 (1005, 'OPT-8830-ONL', 14, 'Đỗ Tuấn Kiệt', '0938552191', '52 Đường số 7, KDC An Phú, TP. Thủ Đức', 'ONLINE', 'COMPLETE_GLASSES', 3950000, 0, 3950000, 'PAID'),

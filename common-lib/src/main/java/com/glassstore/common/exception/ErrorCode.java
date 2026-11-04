@@ -64,6 +64,7 @@ public enum ErrorCode {
     LAB_JOB_INVALID_TRANSITION(40961, "Không thể chuyển lệnh gia công sang trạng thái này", HttpStatus.CONFLICT),
     LAB_JOB_QC_REASON_REQUIRED(40962, "Phải ghi rõ lý do khi đánh giá QC không đạt", HttpStatus.CONFLICT),
     LAB_JOB_QC_REQUIRED(40963, "Lệnh gia công phải đạt QC trước khi bàn giao", HttpStatus.CONFLICT),
+    REPAIR_SERVICE_INVALID_TRANSITION(40964, "Không thể chuyển phiếu sửa chữa sang trạng thái này", HttpStatus.CONFLICT),
 
     // ---- identity ---------------------------------------------------------------
     INVALID_CREDENTIALS(40101, "Tài khoản hoặc mật khẩu không chính xác", HttpStatus.UNAUTHORIZED),

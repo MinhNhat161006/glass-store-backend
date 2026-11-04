@@ -108,11 +108,11 @@ Container MySQL 8.0 sẽ tự động bật trên cổng `3306` và tự động
 
 | Email đăng nhập | Tên người dùng | Vai trò (Role) | Chức năng kiểm thử |
 | :--- | :--- | :--- | :--- |
-| `admin@glassstore.com` | Quản Trị Viên | `ROLE_ADMIN` | Quản trị toàn hệ thống, cấu hình |
-| `staff@glassstore.com` | Nguyễn Bán Hàng | `ROLE_SALES_STAFF` | Bán hàng trực tiếp tại quầy POS |
-| `optometrist@glassstore.com` | Bác Sĩ Trần Đo Mắt | `ROLE_OPTOMETRIST` | Nhập kết quả đo khúc xạ OD/OS |
-| `lab@glassstore.com` | Lê Kỹ Thuật Xưởng Mài | `ROLE_LAB_TECH` | Đổi trạng thái mài kính & kiểm định QC |
-| `customer@gmail.com` | Phạm Khách Hàng | `ROLE_CUSTOMER` | Đăng nhập mua kính online trên Web |
+| `adminoptic@gmail.com` | Admin | `ROLE_ADMIN` | Quản trị toàn hệ thống, cấu hình |
+| `posoptic@gmail.com` | Nguyễn Văn Nam | `ROLE_SALES_STAFF` | Bán hàng trực tiếp tại quầy POS |
+| `optometryoptic@gmail.com` | Lê Thị Ánh Tuyết | `ROLE_OPTOMETRIST` | Nhập kết quả đo khúc xạ OD/OS |
+| `laboptic@gmail.com` | Trần Văn Tuấn | `ROLE_LAB_TECH` | Đổi trạng thái mài kính & kiểm định QC |
+| `customer@gmail.com` | Nguyễn Hoàng Duy | `ROLE_CUSTOMER` | Đăng nhập mua kính online trên Web |
 
 **Dữ liệu sản phẩm mẫu có sẵn (50 chiếc tồn kho mỗi loại):**
 - Gọng kính Titanium Bolon (`FRM-BOLON-BLK`, `FRM-BOLON-SIL`)
