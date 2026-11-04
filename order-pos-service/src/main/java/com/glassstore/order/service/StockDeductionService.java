@@ -67,7 +67,7 @@ public class StockDeductionService {
         Order order = orderRepository.findById(outbox.getOrderId())
                 .orElseThrow(() -> new IllegalStateException("Paid order was not found for stock deduction: " + outbox.getOrderId()));
         Payment payment = paymentRepository.findByOrderId(order.getId()).stream()
-                .filter(candidate -> "SUCCESS".equalsIgnoreCase(candidate.getStatus()))
+                .filter(candidate -> candidate.getStatus() == com.glassstore.order.domain.PaymentStatus.SUCCESS)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("Successful payment was not found for order " + order.getId()));
         CatalogStockDeductionRequest request = new CatalogStockDeductionRequest(

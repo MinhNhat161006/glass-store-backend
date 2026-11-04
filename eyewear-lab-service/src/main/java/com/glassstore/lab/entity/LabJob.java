@@ -18,26 +18,26 @@ public class LabJob {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "order_id", nullable = false)
+    @Column(name = "order_id", nullable = false, unique = true)
     private Long orderId;
 
     @Column(name = "prescription_id", nullable = false)
     private Long prescriptionId;
 
-    @Column(name = "customer_name")
-    private String customerName;
-
-    @Column(name = "lens_sku", nullable = false, length = 100)
-    private String lensSku;
-
-    @Column(name = "lens_name")
-    private String lensName;
-
-    @Column(name = "frame_sku", nullable = false, length = 100)
+    @Column(name = "frame_sku", length = 100)
     private String frameSku;
 
     @Column(name = "frame_name")
     private String frameName;
+
+    @Column(name = "customer_name")
+    private String customerName;
+
+    @Column(name = "lens_sku", length = 100)
+    private String lensSku;
+
+    @Column(name = "lens_name")
+    private String lensName;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50, nullable = false)

@@ -20,6 +20,12 @@ public class ApiResponse<T> {
     @Builder.Default
     private String message = "Success";
 
+    /**
+     * Stable machine-readable error identifier (see {@code ErrorCode}).
+     * Absent on successful responses so existing clients are unaffected.
+     */
+    private String errorCode;
+
     private T data;
 
     @Builder.Default

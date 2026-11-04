@@ -6,8 +6,17 @@ import lombok.*;
 
 import java.math.BigDecimal;
 
+/**
+ * One line of an order.
+ *
+ * <p>{@code productName} and {@code unitPrice} are snapshots copied server-side at
+ * confirmation. Later catalog edits must never alter a completed order (BR-05, BR-06).</p>
+ */
 @Entity
-@Table(name = "order_items")
+@Table(name = "order_items", indexes = {
+        @Index(name = "idx_order_items_order", columnList = "order_id"),
+        @Index(name = "idx_order_items_sku", columnList = "sku_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -19,15 +28,15 @@ public class OrderItem {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "order_id", nullable = false)
     @JsonBackReference
     private Order order;
 
-    @Column(name = "sku_id", nullable = false)
+    @Column(name = "sku_id", nullable = false, length = 100)
     private String skuId;
 
-    @Column(name = "product_name", nullable = false)
+    @Column(name = "product_name", nullable = false, length = 255)
     private String productName;
 
     @Column(name = "prescription_id")
@@ -37,9 +46,9 @@ public class OrderItem {
     @Builder.Default
     private Integer quantity = 1;
 
-    @Column(name = "unit_price", precision = 12, scale = 2, nullable = false)
+    @Column(name = "unit_price", precision = 14, scale = 2, nullable = false)
     private BigDecimal unitPrice;
 
-    @Column(name = "subtotal", precision = 12, scale = 2, nullable = false)
+    @Column(name = "subtotal", precision = 14, scale = 2, nullable = false)
     private BigDecimal subtotal;
 }

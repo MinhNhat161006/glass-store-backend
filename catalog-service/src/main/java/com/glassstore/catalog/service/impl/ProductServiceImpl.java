@@ -66,6 +66,7 @@ public class ProductServiceImpl implements ProductService {
                         .lensIndex(v.getLensIndex())
                         .price(v.getPrice())
                         .stockQuantity(v.getStockQuantity())
+                        .availableQuantity(v.getAvailableQuantity())
                         .imageUrl(v.getImageUrl())
                         .status(v.getStatus())
                         .build())

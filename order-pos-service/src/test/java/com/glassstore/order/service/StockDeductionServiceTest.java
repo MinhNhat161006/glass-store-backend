@@ -1,6 +1,7 @@
 package com.glassstore.order.service;
 
 import com.glassstore.order.client.CatalogInventoryClient;
+import com.glassstore.order.domain.PaymentStatus;
 import com.glassstore.order.dto.CatalogStockDeductionResponse;
 import com.glassstore.order.entity.Order;
 import com.glassstore.order.entity.OrderItem;
@@ -52,7 +53,7 @@ class StockDeductionServiceTest {
                 .orderId(42L)
                 .idempotencyKey("pos-request-42")
                 .transactionCode("TXN-42")
-                .status("SUCCESS")
+                .status(PaymentStatus.SUCCESS)
                 .build();
         StockDeductionOutbox outbox = StockDeductionOutbox.builder()
                 .id(7L)

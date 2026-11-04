@@ -1,14 +1,14 @@
 # GlassStore Backend - Omnichannel Eyewear Retail Microservices
 
-Dự án Backend xây dựng trên nền tảng **Java 21 (LTS)**, **Spring Boot 3.4.3**, **Spring Cloud 2024.0.0**, **Spring Data JPA**, và **MySQL 8.0**, phục vụ toàn bộ nghiệp vụ chuỗi bán lẻ mắt kính đa kênh (Omnichannel) theo tiêu chuẩn SRS.
+Dự án Backend xây dựng trên nền tảng **Java 25 (LTS)**, **Spring Boot 3.5.16**, **Spring Cloud 2025.0.3**, **Spring Data JPA**, và **MySQL 8.0**, phục vụ toàn bộ nghiệp vụ chuỗi bán lẻ mắt kính đa kênh (Omnichannel) theo tiêu chuẩn SRS.
 
 ---
 
 ## 1. Công nghệ sử dụng (Tech Stack)
 
-- **Ngôn ngữ:** Java 21 (LTS)
-- **Framework:** Spring Boot 3.4.3
-- **Kiến trúc phân tán:** Spring Cloud 2024.0.0
+- **Ngôn ngữ:** Java 25 (LTS)
+- **Framework:** Spring Boot 3.5.16
+- **Kiến trúc phân tán:** Spring Cloud 2025.0.3
   - **API Gateway:** Spring Cloud Gateway (Port 8080 - Single Entry Point, Netty Reactive)
   - **Inter-service Communication:** Spring Cloud OpenFeign (Declarative REST Client)
 - **Cơ sở dữ liệu:** MySQL 8.0 (Logical Database Isolation: 1 MySQL Server chứa 4 Schemas độc lập)
@@ -66,8 +66,8 @@ backend/
 
 ## 3. Yêu cầu môi trường (Prerequisites)
 
-- **Java JDK:** 21 trở lên (khuyến nghị OpenJDK 21 LTS hoặc Eclipse Temurin 21)
-- **Maven:** 3.8+ (hoặc dùng Maven wrapper trong IDE)
+- **Java JDK:** 25 trở lên (khuyến nghị OpenJDK 25 LTS hoặc Eclipse Temurin 25)
+- **Maven:** 3.9+ (hoặc dùng Maven wrapper tương thích với Maven 3.9+)
 - **Docker & Docker Compose:** Đã cài đặt Docker Desktop hoặc Docker Engine để chạy MySQL
 
 ---
@@ -167,8 +167,13 @@ Base URL Gateway: `http://localhost:8080`
 | `POST` | `/api/auth/send-otp` | `identity-service` | Gửi mã OTP xác thực qua Google SMTP | 200 OK |
 | `GET` | `/api/products` | `catalog-service` | Lấy danh sách kính (bộ lọc giá, kiểu dáng, chất liệu) | 200 OK |
 | `GET` | `/api/products/{id}` | `catalog-service` | Xem chi tiết gọng/tròng/kính râm | 200 OK |
-| `POST` | `/api/orders` | `order-pos-service` | Tạo đơn hàng đặt kính Online | 201 Created |
-| `POST` | `/api/pos/checkout` | `order-pos-service` | Bán hàng trực tiếp tại quầy POS | 200 OK |
+| `POST` | `/api/orders` | `order-pos-service` | Tạo đơn hàng đặt kính Online (cần `Idempotency-Key`) | 201 Created |
+| `GET` | `/api/cart` | `order-pos-service` | Lấy / tạo giỏ hàng khách | 200 OK |
+| `POST` | `/api/cart/items` | `order-pos-service` | Thêm SKU vào giỏ | 201 Created |
+| `POST` | `/api/cart/checkout` | `order-pos-service` | Đặt hàng từ giỏ | 201 Created |
+| `POST` | `/api/pos/sessions` | `order-pos-service` | Mở phiên bán hàng POS | 201 Created |
+| `POST` | `/api/pos/checkout` | `order-pos-service` | Bán hàng tại quầy (CASH settle ngay) | 201 Created |
+| `POST` | `/api/payments/callback` | `order-pos-service` | Webhook cổng thanh toán (chưa cấu hình provider) | 200 OK |
 | `POST` | `/api/prescriptions` | `eyewear-lab-service`| Lưu thông số đo mắt OD/OS cho khách hàng | 201 Created |
 | `GET` | `/api/lab-jobs` | `eyewear-lab-service`| Lấy danh sách kính chờ mài lắp tại xưởng | 200 OK |
 | `PATCH`| `/api/lab-jobs/{id}/status`| `eyewear-lab-service`| Cập nhật trạng thái gia công (Mài/QC/Bàn giao)| 200 OK |
