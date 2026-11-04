@@ -56,6 +56,42 @@ public class ProductVariant {
     @Builder.Default
     private Integer stockQuantity = 0;
 
+    /**
+     * Units physically held for unpaid orders. Counts against availability (BR-08).
+     */
+    @Column(name = "reserved_quantity", nullable = false)
+    @Builder.Default
+    private Integer reservedQuantity = 0;
+
+    /**
+     * Units that exist but cannot be sold (damaged, display-only). Counts against
+     * availability (BR-08, EX-INV-04).
+     */
+    @Column(name = "non_sellable_quantity", nullable = false)
+    @Builder.Default
+    private Integer nonSellableQuantity = 0;
+
+    /**
+     * Optimistic-lock guard. Two customers racing for the last unit both read the same
+     * version; only one commit succeeds, the other is retried or rejected (EX-INV-05).
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Long version = 0L;
+
+    /**
+     * Available to sell = actual - reserved - non-sellable (BR-08).
+     * Never allowed to be negative by any write path.
+     */
+    @Transient
+    public int getAvailableQuantity() {
+        int actual = stockQuantity == null ? 0 : stockQuantity;
+        int reserved = reservedQuantity == null ? 0 : reservedQuantity;
+        int broken = nonSellableQuantity == null ? 0 : nonSellableQuantity;
+        return Math.max(0, actual - reserved - broken);
+    }
+
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 

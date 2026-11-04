@@ -14,6 +14,9 @@ import java.util.List;
 public class CreateStockTransferRequest {
 
     @NotBlank
+    private String sourceLocationCode;
+
+    @NotBlank
     private String destinationLocationCode;
 
     @Size(max = 500)

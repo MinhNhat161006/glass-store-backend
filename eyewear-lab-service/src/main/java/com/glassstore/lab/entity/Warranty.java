@@ -6,7 +6,10 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "warranties")
+@Table(name = "warranties", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_warranty_order_item_benefit",
+                columnNames = {"order_item_id", "benefit_type"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -23,6 +26,24 @@ public class Warranty {
 
     @Column(name = "original_order_code")
     private String originalOrderCode;
+
+    @Column(name = "order_id")
+    private Long orderId;
+
+    @Column(name = "order_item_id")
+    private Long orderItemId;
+
+    @Column(name = "benefit_type", length = 40)
+    private String benefitType;
+
+    @Column(name = "activated_at")
+    private LocalDateTime activatedAt;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
+    @Column(name = "product_barcode")
+    private String productBarcode;
 
     @Column(name = "customer_id")
     private Long customerId;

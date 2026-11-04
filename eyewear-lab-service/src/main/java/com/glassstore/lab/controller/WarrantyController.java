@@ -1,7 +1,11 @@
 package com.glassstore.lab.controller;
 
+import com.glassstore.lab.dto.WarrantyActivationRequest;
+import com.glassstore.lab.dto.WarrantyLookupItemDTO;
 import com.glassstore.lab.entity.Warranty;
 import com.glassstore.lab.repository.WarrantyRepository;
+import com.glassstore.lab.service.WarrantyService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +23,7 @@ import java.util.Map;
 public class WarrantyController {
 
     private final WarrantyRepository warrantyRepository;
+    private final WarrantyService warrantyService;
 
     @GetMapping
     public ResponseEntity<List<Warranty>> getAllWarranties() {
@@ -26,11 +31,20 @@ public class WarrantyController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<Warranty>> searchWarranties(@RequestParam(name = "q", required = false) String q) {
-        if (q == null || q.trim().isEmpty()) {
-            return ResponseEntity.ok(warrantyRepository.findAllByOrderByCreatedAtDesc());
+    public ResponseEntity<?> searchWarranties(
+            @RequestParam(name = "phone", required = false) String phone,
+            @RequestParam(name = "barcode", required = false) String barcode,
+            @RequestParam(name = "q", required = false) String q) {
+        if (phone != null && !phone.isBlank()) {
+            return ResponseEntity.ok(warrantyService.lookupByPhone(phone));
         }
-        return ResponseEntity.ok(warrantyRepository.search(q.trim()));
+        if (barcode != null && !barcode.isBlank()) {
+            return ResponseEntity.ok(warrantyService.lookupByBarcode(barcode));
+        }
+        if (q != null && !q.trim().isEmpty()) {
+            return ResponseEntity.ok(warrantyRepository.search(q.trim()));
+        }
+        return ResponseEntity.ok(warrantyRepository.findAllByOrderByCreatedAtDesc());
     }
 
     @GetMapping("/{id}")
@@ -66,6 +80,11 @@ public class WarrantyController {
         Warranty saved = warrantyRepository.save(warranty);
         log.info("Tạo mới phiếu bảo hành thành công: {}", saved.getWarrantyCode());
         return ResponseEntity.ok(saved);
+    }
+
+    @PostMapping("/activate")
+    public ResponseEntity<Warranty> activateWarranty(@Valid @RequestBody WarrantyActivationRequest request) {
+        return ResponseEntity.ok(warrantyService.activate(request));
     }
 
     @PatchMapping("/{id}/status")

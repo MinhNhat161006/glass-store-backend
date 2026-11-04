@@ -67,6 +67,12 @@ public class Prescription {
     @Column(length = 500)
     private String notes;
 
+    @Column(name = "lens_sku")
+    private String lensSku;
+
+    @Column(name = "lens_name")
+    private String lensName;
+
     @Column(name = "created_at", updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

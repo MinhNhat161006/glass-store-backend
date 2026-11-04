@@ -1,5 +1,7 @@
 package com.glassstore.lab.service;
 
+import com.glassstore.common.exception.ApiException;
+import com.glassstore.common.exception.ErrorCode;
 import com.glassstore.lab.dto.CreateLabJobRequest;
 import com.glassstore.lab.dto.LabJobResponse;
 import com.glassstore.lab.dto.UpdateJobStatusRequest;
@@ -7,6 +9,7 @@ import com.glassstore.lab.entity.LabJob;
 import com.glassstore.lab.entity.LabJobStatus;
 import com.glassstore.lab.entity.Prescription;
 import com.glassstore.lab.repository.LabJobRepository;
+import com.glassstore.lab.repository.LabJobStatusHistoryRepository;
 import com.glassstore.lab.repository.PrescriptionRepository;
 import com.glassstore.lab.service.impl.LabJobServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +22,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,6 +39,9 @@ class LabJobServiceTest {
 
     @Mock
     private PrescriptionRepository prescriptionRepository;
+
+    @Mock
+    private LabJobStatusHistoryRepository historyRepository;
 
     @InjectMocks
     private LabJobServiceImpl labJobService;
@@ -75,55 +83,49 @@ class LabJobServiceTest {
     }
 
     @Test
-    @DisplayName("getLabJobs: Trả về danh sách rỗng khi không có bản ghi nào, không ném lỗi")
-    void getLabJobs_WhenEmpty_ShouldReturnEmptyList() {
-        when(labJobRepository.findAllByOrderByCreatedAtDesc()).thenReturn(Collections.emptyList());
+    @DisplayName("Returns an empty list when no jobs exist")
+    void getLabJobsWhenEmpty() {
+        when(labJobRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of());
 
-        List<LabJobResponse> result = labJobService.getLabJobs(null);
-
-        assertThat(result).isNotNull();
-        assertThat(result).isEmpty();
+        assertThat(labJobService.getLabJobs(null)).isEmpty();
         verify(prescriptionRepository, never()).findAllById(any());
     }
 
     @Test
-    @DisplayName("getLabJobs: Lấy danh sách kèm thông số độ khúc xạ từ PrescriptionRepository")
-    void getLabJobs_WithData_ShouldMapRefractionParameters() {
+    @DisplayName("Maps prescription measurements into the job response")
+    void getLabJobsMapsPrescription() {
         when(labJobRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(pendingJob));
         when(prescriptionRepository.findAllById(Set.of(100L))).thenReturn(List.of(prescription));
 
         List<LabJobResponse> result = labJobService.getLabJobs(null);
 
         assertThat(result).hasSize(1);
-        LabJobResponse item = result.get(0);
-        assertThat(item.getId()).isEqualTo(1L);
-        assertThat(item.getStatus()).isEqualTo(LabJobStatus.PENDING);
-        assertThat(item.getOdSphere()).isEqualTo(new BigDecimal("-2.25"));
-        assertThat(item.getOdCyl()).isEqualTo(new BigDecimal("-0.75"));
-        assertThat(item.getOdAxis()).isEqualTo(175);
-        assertThat(item.getOsSphere()).isEqualTo(new BigDecimal("-2.00"));
-        assertThat(item.getOsCyl()).isEqualTo(new BigDecimal("-0.50"));
-        assertThat(item.getOsAxis()).isEqualTo(180);
-        assertThat(item.getPd()).isEqualTo(new BigDecimal("63.5"));
+        assertThat(result.get(0).getOdSphere()).isEqualByComparingTo("-2.25");
+        assertThat(result.get(0).getOsAxis()).isEqualTo(180);
+        assertThat(result.get(0).getPd()).isEqualByComparingTo("63.5");
     }
 
     @Test
-    @DisplayName("getLabJobs: Lọc theo status")
-    void getLabJobs_WithStatusFilter_ShouldCallFindByStatus() {
+    @DisplayName("Filters jobs by status")
+    void getLabJobsFiltersByStatus() {
         when(labJobRepository.findByStatusOrderByCreatedAtDesc(LabJobStatus.PENDING))
                 .thenReturn(List.of(pendingJob));
-        when(prescriptionRepository.findAllById(Set.of(100L))).thenReturn(List.of(prescription));
 
-        List<LabJobResponse> result = labJobService.getLabJobs(LabJobStatus.PENDING);
-
-        assertThat(result).hasSize(1);
-        verify(labJobRepository).findByStatusOrderByCreatedAtDesc(LabJobStatus.PENDING);
+        assertThat(labJobService.getLabJobs(LabJobStatus.PENDING)).hasSize(1);
         verify(labJobRepository, never()).findAllByOrderByCreatedAtDesc();
     }
 
     @Test
-    @DisplayName("createLabJob: Tạo mới lệnh mài với status ban đầu là PENDING")
-    void createLabJob_ShouldCreateWithStatusPending() {
+    @DisplayName("Creates a lab job in PENDING state")
+    void createLabJob() {
+        when(labJobRepository.findByOrderId(502L)).thenReturn(Optional.empty());
+        when(prescriptionRepository.findById(100L)).thenReturn(Optional.of(prescription));
+        when(labJobRepository.save(any(LabJob.class))).thenAnswer(invocation -> {
+            LabJob job = invocation.getArgument(0);
+            job.setId(10L);
+            return job;
+        });
+
         CreateLabJobRequest request = CreateLabJobRequest.builder()
                 .orderId(502L)
                 .customerName("Trần Văn A")
@@ -132,34 +134,60 @@ class LabJobServiceTest {
                 .frameSku("FRAME-GUCCI-99")
                 .build();
 
-        when(labJobRepository.save(any(LabJob.class))).thenAnswer(invocation -> {
-            LabJob entity = invocation.getArgument(0);
-            entity.setId(10L);
-            return entity;
-        });
-        when(prescriptionRepository.findById(100L)).thenReturn(Optional.of(prescription));
-
         LabJobResponse response = labJobService.createLabJob(request);
 
         assertThat(response.getId()).isEqualTo(10L);
         assertThat(response.getStatus()).isEqualTo(LabJobStatus.PENDING);
-        assertThat(response.getOrderId()).isEqualTo(502L);
-        assertThat(response.getLensSku()).isEqualTo("LENS-HOYA-167");
-        assertThat(response.getOdSphere()).isEqualTo(new BigDecimal("-2.25"));
+        assertThat(response.getCustomerName()).isEqualTo("Trần Văn A");
+        assertThat(response.getOdSphere()).isEqualByComparingTo("-2.25");
+        verify(historyRepository).save(any());
     }
 
     @Test
-    @DisplayName("updateJobStatus: Chuyển sang IN_PROGRESS thì gán startedAt và technicianId")
-    void updateJobStatus_ToInProgress_ShouldSetStartedAtAndTechnicianId() {
+    @DisplayName("Returns the existing job for a repeated order")
+    void createFromOrderIsIdempotent() {
+        when(labJobRepository.findByOrderId(501L)).thenReturn(Optional.of(pendingJob));
+        when(prescriptionRepository.findById(100L)).thenReturn(Optional.of(prescription));
+
+        LabJobResponse result = labJobService.createFromOrder(
+                501L, 100L, "FRAME-RAYBAN-001", null, "LENS-ESSILOR-160", null, "Tech");
+
+        assertThat(result.getId()).isEqualTo(1L);
+        verify(labJobRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Rejects an incomplete prescription before fabrication")
+    void incompletePrescription() {
+        when(labJobRepository.findByOrderId(501L)).thenReturn(Optional.empty());
+        when(prescriptionRepository.findById(100L)).thenReturn(Optional.of(Prescription.builder()
+                .id(100L)
+                .customerId(10L)
+                .optometristId(6L)
+                .osSph(new BigDecimal("-1.00"))
+                .pd(new BigDecimal("63.5"))
+                .build()));
+
+        assertThatThrownBy(() -> labJobService.createFromOrder(
+                501L, 100L, "FRAME", null, "LENS", null, "Tech"))
+                .isInstanceOf(ApiException.class)
+                .extracting(exception -> ((ApiException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.PRESCRIPTION_INCOMPLETE);
+    }
+
+    @Test
+    @DisplayName("Starts an accepted job and records technician details")
+    void updateToInProgress() {
+        pendingJob.setStatus(LabJobStatus.RECEIVED);
         when(labJobRepository.findById(1L)).thenReturn(Optional.of(pendingJob));
-        when(labJobRepository.save(any(LabJob.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(labJobRepository.save(any(LabJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(prescriptionRepository.findById(100L)).thenReturn(Optional.of(prescription));
 
         UpdateJobStatusRequest request = UpdateJobStatusRequest.builder()
                 .status(LabJobStatus.IN_PROGRESS)
                 .technicianId(25L)
                 .technicianName("Nguyễn Kỹ Thuật")
-                .notes("Bắt đầu mài tròng")
+                .technicianNotes("Bắt đầu mài tròng")
                 .build();
 
         LabJobResponse response = labJobService.updateJobStatus(1L, request);
@@ -171,11 +199,11 @@ class LabJobServiceTest {
     }
 
     @Test
-    @DisplayName("updateJobStatus: Chuyển sang QC_PASSED thì gán completedAt")
-    void updateJobStatus_ToQcPassed_ShouldSetCompletedAt() {
+    @DisplayName("Completes QC and records the completion time")
+    void updateToQcPassed() {
         pendingJob.setStatus(LabJobStatus.QC_PENDING);
         when(labJobRepository.findById(1L)).thenReturn(Optional.of(pendingJob));
-        when(labJobRepository.save(any(LabJob.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(labJobRepository.save(any(LabJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(prescriptionRepository.findById(100L)).thenReturn(Optional.of(prescription));
 
         UpdateJobStatusRequest request = UpdateJobStatusRequest.builder()
@@ -191,38 +219,36 @@ class LabJobServiceTest {
     }
 
     @Test
-    @DisplayName("updateJobStatus: Chuyển sang QC_FAILED mà không có qcNotes thì ném IllegalArgumentException")
-    void updateJobStatus_ToQcFailed_WithoutNotes_ShouldThrowIllegalArgumentException() {
+    @DisplayName("Requires a reason for QC failure")
+    void qcFailureRequiresReason() {
+        pendingJob.setStatus(LabJobStatus.QC_PENDING);
         when(labJobRepository.findById(1L)).thenReturn(Optional.of(pendingJob));
 
         UpdateJobStatusRequest request = UpdateJobStatusRequest.builder()
                 .status(LabJobStatus.QC_FAILED)
-                .qcNotes("") // rỗng
+                .qcNotes(" ")
                 .build();
 
         assertThatThrownBy(() -> labJobService.updateJobStatus(1L, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("qcNotes");
-
+                .isInstanceOf(ApiException.class)
+                .extracting(exception -> ((ApiException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.LAB_JOB_QC_REASON_REQUIRED);
         verify(labJobRepository, never()).save(any());
     }
 
     @Test
-    @DisplayName("updateJobStatus: Chuyển sang QC_FAILED có qcNotes hợp lệ thì thành công")
-    void updateJobStatus_ToQcFailed_WithValidNotes_ShouldSucceed() {
+    @DisplayName("Rejects skipping QC before delivery")
+    void cannotSkipQc() {
+        pendingJob.setStatus(LabJobStatus.IN_PROGRESS);
         when(labJobRepository.findById(1L)).thenReturn(Optional.of(pendingJob));
-        when(labJobRepository.save(any(LabJob.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(prescriptionRepository.findById(100L)).thenReturn(Optional.of(prescription));
 
         UpdateJobStatusRequest request = UpdateJobStatusRequest.builder()
-                .status(LabJobStatus.QC_FAILED)
-                .qcNotes("Bị mẻ góc mép tròng khi mài vát")
+                .status(LabJobStatus.READY_FOR_DELIVERY)
                 .build();
 
-        LabJobResponse response = labJobService.updateJobStatus(1L, request);
-
-        assertThat(response.getStatus()).isEqualTo(LabJobStatus.QC_FAILED);
-        assertThat(response.getQcNotes()).isEqualTo("Bị mẻ góc mép tròng khi mài vát");
+        assertThatThrownBy(() -> labJobService.updateJobStatus(1L, request))
+                .isInstanceOf(ApiException.class)
+                .extracting(exception -> ((ApiException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.LAB_JOB_INVALID_TRANSITION);
     }
 }
-

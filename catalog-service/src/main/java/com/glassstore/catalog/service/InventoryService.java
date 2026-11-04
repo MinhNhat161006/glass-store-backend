@@ -4,6 +4,9 @@ import com.glassstore.catalog.dto.*;
 import com.glassstore.catalog.entity.*;
 import com.glassstore.catalog.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +20,18 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class InventoryService {
+    @Transactional(readOnly = true)
+    public void checkAvailability(StockCheckRequest request) {
+        if (!Set.of(BRANCH_01, BRANCH_02).contains(request.branchCode())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chi nhánh POS không hợp lệ.");
+        Map<String, Integer> quantities = new TreeMap<>();
+        request.items().forEach(item -> quantities.merge(item.sku(), item.quantity(), Math::addExact));
+        quantities.forEach((sku, quantity) -> {
+            InventoryBalance balance = balanceRepository.findBySkuAndLocationCode(sku, request.branchCode())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "SKU không có ở chi nhánh: " + sku));
+            if (balance.getQuantity() < quantity || balance.getVariant().getStockQuantity() < quantity)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Không đủ tồn tại chi nhánh cho SKU " + sku);
+        });
+    }
 
     public static final String BRANCH_01 = "BRANCH_01";
     public static final String BRANCH_02 = "BRANCH_02";
@@ -66,31 +81,66 @@ public class InventoryService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public Page<InventoryMovementDTO> getMovements(
+            String sku, String locationCode, String referenceId, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phân trang lịch sử không hợp lệ.");
+        }
+        String normalizedLocation = locationCode == null || locationCode.isBlank()
+                ? null
+                : normalizeLocationCode(locationCode);
+        String normalizedSku = sku == null || sku.isBlank() ? null : sku.trim();
+        String normalizedReferenceId = referenceId == null || referenceId.isBlank()
+                ? null
+                : referenceId.trim();
+        return movementRepository.findByFilters(
+                        normalizedSku,
+                        normalizedLocation,
+                        normalizedReferenceId,
+                        PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")))
+                .map(this::toMovementDto);
+    }
+
     @Transactional
-    public StockTransferDTO createTransfer(CreateStockTransferRequest request) {
-        String destinationCode = request.getDestinationLocationCode().trim().toUpperCase(Locale.ROOT);
-        if (!BRANCH_01.equals(destinationCode) && !BRANCH_02.equals(destinationCode)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kho nhận phải là Chi nhánh 01 hoặc Chi nhánh 02.");
+    public StockTransferDTO createTransfer(CreateStockTransferRequest request, String actor) {
+        String sourceCode = normalizeLocationCode(request.getSourceLocationCode());
+        String destinationCode = normalizeLocationCode(request.getDestinationLocationCode());
+        if (sourceCode.equals(destinationCode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kho nguồn và kho đích phải khác nhau.");
         }
 
-        InventoryLocation source = locationRepository.findByCode(LAB)
-                .orElseThrow(() -> new IllegalStateException("Lab inventory location is not initialized."));
-        InventoryLocation destination = locationRepository.findByCode(destinationCode)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kho nhận không hợp lệ."));
+        InventoryLocation source = locationRepository.findByCodeAndActiveTrue(sourceCode)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kho nguồn không hợp lệ."));
+        InventoryLocation destination = locationRepository.findByCodeAndActiveTrue(destinationCode)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kho đích không hợp lệ."));
 
         Set<String> seenSkus = new HashSet<>();
         List<StockTransferItem> items = new ArrayList<>();
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phiếu điều chuyển phải có ít nhất một SKU.");
+        }
         for (CreateStockTransferRequest.Item requestedItem : request.getItems()) {
+            if (requestedItem == null || requestedItem.getSku() == null || requestedItem.getSku().isBlank()
+                    || requestedItem.getQuantity() == null || requestedItem.getQuantity() <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SKU và số lượng điều chuyển không hợp lệ.");
+            }
             String sku = requestedItem.getSku().trim();
             if (!seenSkus.add(sku)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mỗi SKU chỉ được thêm một lần vào phiếu.");
             }
             ProductVariant variant = variantRepository.findBySku(sku)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy SKU " + sku + "."));
-            InventoryBalance sourceBalance = balanceRepository.findBySkuAndLocationCode(sku, LAB)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "SKU " + sku + " chưa có số liệu tồn tại kho Lab."));
+            InventoryBalance sourceBalance = balanceRepository.findBySkuAndLocationCode(sku, sourceCode)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.CONFLICT, "SKU " + sku + " chưa có số liệu tồn tại kho nguồn."));
+            if (balanceRepository.findBySkuAndLocationCode(sku, destinationCode).isEmpty()) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT, "SKU " + sku + " chưa có số liệu tồn tại kho đích.");
+            }
             if (requestedItem.getQuantity() > sourceBalance.getQuantity()) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Số lượng SKU " + sku + " vượt tồn kho Lab hiện tại.");
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT, "Số lượng SKU " + sku + " vượt tồn kho hiện tại tại kho nguồn.");
             }
             items.add(StockTransferItem.builder()
                     .variant(variant)
@@ -106,6 +156,7 @@ public class InventoryService {
                 .destinationLocation(destination)
                 .reason(request.getReason() == null ? null : request.getReason().trim())
                 .status(StockTransferStatus.PENDING)
+                .createdBy(actor)
                 .items(items)
                 .build();
         items.forEach(item -> item.setTransfer(transfer));
@@ -113,67 +164,109 @@ public class InventoryService {
     }
 
     @Transactional
-    public StockTransferDTO dispatchTransfer(Long id) {
+    public StockTransferDTO receiveTransfer(Long id, String actor) {
         StockTransfer transfer = transferRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy phiếu điều chuyển."));
-        if (transfer.getStatus() != StockTransferStatus.PENDING) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Phiếu điều chuyển không còn ở trạng thái chờ xuất kho.");
+        if (transfer.getStatus() != StockTransferStatus.PENDING
+                && transfer.getStatus() != StockTransferStatus.IN_TRANSIT) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ phiếu chờ nhận mới được xác nhận nhận hàng.");
+        }
+        if (!transfer.getSourceLocation().isActive() || !transfer.getDestinationLocation().isActive()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Kho nguồn hoặc kho đích không còn hoạt động.");
+        }
+        if (transfer.getItems() == null || transfer.getItems().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Phiếu điều chuyển không có SKU hợp lệ.");
         }
 
+        StockTransferStatus previousStatus = transfer.getStatus();
+        boolean pendingTransfer = previousStatus == StockTransferStatus.PENDING;
+        LocalDateTime receivedAt = LocalDateTime.now();
+        if (transferRepository.transitionToReceived(
+                id, previousStatus, StockTransferStatus.RECEIVED, receivedAt, actor) != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Phiếu điều chuyển đã được xử lý.");
+        }
         for (StockTransferItem item : sortedItems(transfer.getItems())) {
-            int balanceUpdated = balanceRepository.decrementIfAvailable(
-                    item.getSku(), transfer.getSourceLocation().getCode(), item.getQuantity());
-            int productUpdated = variantRepository.decrementStockIfAvailable(item.getSku(), item.getQuantity());
-            if (balanceUpdated != 1 || productUpdated != 1) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Không đủ tồn khả dụng để xuất SKU " + item.getSku() + ".");
+            if (item.getSku() == null || item.getSku().isBlank()
+                    || item.getQuantity() == null || item.getQuantity() <= 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Phiếu điều chuyển chứa SKU hoặc số lượng không hợp lệ.");
             }
-            movementRepository.save(InventoryMovement.builder()
-                    .movementType("TRANSFER_DISPATCH")
-                    .sku(item.getSku())
-                    .sourceLocationCode(transfer.getSourceLocation().getCode())
-                    .destinationLocationCode(transfer.getDestinationLocation().getCode())
-                    .referenceType("STOCK_TRANSFER")
-                    .referenceId(transfer.getTransferCode())
-                    .quantity(item.getQuantity())
-                    .performedBy("INTERNAL_PORTAL")
-                    .build());
-        }
-
-        transfer.setStatus(StockTransferStatus.IN_TRANSIT);
-        transfer.setDispatchedAt(LocalDateTime.now());
-        return toTransferDto(transfer);
-    }
-
-    @Transactional
-    public StockTransferDTO receiveTransfer(Long id) {
-        StockTransfer transfer = transferRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy phiếu điều chuyển."));
-        if (transfer.getStatus() != StockTransferStatus.IN_TRANSIT) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ phiếu đang vận chuyển mới được xác nhận nhận hàng.");
-        }
-
-        for (StockTransferItem item : sortedItems(transfer.getItems())) {
-            int balanceUpdated = balanceRepository.increment(
-                    item.getSku(), transfer.getDestinationLocation().getCode(), item.getQuantity());
-            int productUpdated = variantRepository.incrementStock(item.getSku(), item.getQuantity());
-            if (balanceUpdated != 1 || productUpdated != 1) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Không thể cập nhật tồn kho cho SKU " + item.getSku() + ".");
+            String sourceCode = transfer.getSourceLocation().getCode();
+            String destinationCode = transfer.getDestinationLocation().getCode();
+            if (balanceRepository.findBySkuAndLocationCode(item.getSku(), destinationCode).isEmpty()) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT, "SKU " + item.getSku() + " chưa có số liệu tồn tại kho đích.");
             }
-            movementRepository.save(InventoryMovement.builder()
-                    .movementType("TRANSFER_RECEIVE")
-                    .sku(item.getSku())
-                    .sourceLocationCode(transfer.getSourceLocation().getCode())
-                    .destinationLocationCode(transfer.getDestinationLocation().getCode())
-                    .referenceType("STOCK_TRANSFER")
-                    .referenceId(transfer.getTransferCode())
-                    .quantity(item.getQuantity())
-                    .performedBy("INTERNAL_PORTAL")
-                    .build());
+
+            if (pendingTransfer) {
+                int sourceUpdated = balanceRepository.decrementIfAvailable(
+                        item.getSku(), sourceCode, item.getQuantity());
+                if (sourceUpdated != 1) {
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT, "Không đủ tồn kho nguồn cho SKU " + item.getSku() + ".");
+                }
+                movementRepository.save(transferMovement(
+                        "TRANSFER_OUT", item, transfer, actor, sourceCode, destinationCode));
+            }
+
+            int destinationUpdated = balanceRepository.increment(
+                    item.getSku(), destinationCode, item.getQuantity());
+            if (destinationUpdated != 1) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT, "Không thể cập nhật tồn kho đích cho SKU " + item.getSku() + ".");
+            }
+            if (!pendingTransfer && variantRepository.incrementStock(item.getSku(), item.getQuantity()) != 1) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT, "Không thể đồng bộ tồn tổng cho SKU " + item.getSku() + ".");
+            }
+            movementRepository.save(transferMovement(
+                    "TRANSFER_IN", item, transfer, actor, sourceCode, destinationCode));
         }
 
         transfer.setStatus(StockTransferStatus.RECEIVED);
-        transfer.setReceivedAt(LocalDateTime.now());
+        transfer.setReceivedAt(receivedAt);
+        transfer.setReceivedBy(actor);
         return toTransferDto(transfer);
+    }
+
+    private String normalizeLocationCode(String code) {
+        if (code == null || code.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kho nguồn và kho đích là bắt buộc.");
+        }
+        return code.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private InventoryMovement transferMovement(
+            String movementType,
+            StockTransferItem item,
+            StockTransfer transfer,
+            String actor,
+            String sourceCode,
+            String destinationCode) {
+        return InventoryMovement.builder()
+                .movementType(movementType)
+                .sku(item.getSku())
+                .sourceLocationCode(sourceCode)
+                .destinationLocationCode(destinationCode)
+                .referenceType("STOCK_TRANSFER")
+                .referenceId(transfer.getTransferCode())
+                .quantity(item.getQuantity())
+                .performedBy(actor)
+                .build();
+    }
+
+    private InventoryMovementDTO toMovementDto(InventoryMovement movement) {
+        return InventoryMovementDTO.builder()
+                .id(movement.getId())
+                .movementType(movement.getMovementType())
+                .sku(movement.getSku())
+                .sourceLocationCode(movement.getSourceLocationCode())
+                .destinationLocationCode(movement.getDestinationLocationCode())
+                .referenceType(movement.getReferenceType())
+                .referenceId(movement.getReferenceId())
+                .quantity(movement.getQuantity())
+                .performedBy(movement.getPerformedBy())
+                .createdAt(movement.getCreatedAt())
+                .build();
     }
 
     @Transactional
@@ -188,6 +281,7 @@ public class InventoryService {
                 .or(() -> deductionRepository.findByIdempotencyKey(request.getIdempotencyKey()));
         if (previous.isPresent()) {
             InventoryDeduction deduction = previous.get();
+            if (Boolean.TRUE.equals(deduction.getCancelled())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Đơn đã hủy, không được trừ kho lại.");
             if (!deduction.getOrderId().equals(request.getOrderId())
                     || !deduction.getIdempotencyKey().equals(request.getIdempotencyKey())
                     || !deduction.getTransactionCode().equals(request.getTransactionCode())
@@ -234,6 +328,28 @@ public class InventoryService {
         return new StockDeductionResponse(request.getOrderId(), locationCode, false);
     }
 
+    @Transactional
+    public void cancelSale(StockDeductionRequest request) {
+        InventoryDeduction deduction = deductionRepository.findByOrderId(request.getOrderId()).orElse(null);
+        if (deduction == null) {
+            deduction = InventoryDeduction.builder().orderId(request.getOrderId()).idempotencyKey(request.getIdempotencyKey())
+                    .transactionCode(request.getTransactionCode()).locationCode("NONE").build();
+            deduction.setCancelled(true); deductionRepository.saveAndFlush(deduction); return;
+        }
+        if (!deduction.getIdempotencyKey().equals(request.getIdempotencyKey()) || !deduction.getTransactionCode().equals(request.getTransactionCode()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Thông tin hoàn kho không khớp giao dịch gốc.");
+        if (Boolean.TRUE.equals(deduction.getCancelled())) return;
+        TreeMap<String,Integer> items = new TreeMap<>(); request.getItems().forEach(item -> items.merge(item.getSku(),item.getQuantity(),Math::addExact));
+        for (Map.Entry<String,Integer> item : items.entrySet()) {
+            if (balanceRepository.increment(item.getKey(),deduction.getLocationCode(),item.getValue()) != 1 || variantRepository.incrementStock(item.getKey(),item.getValue()) != 1)
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Không tìm thấy tồn gốc để hoàn SKU " + item.getKey());
+            movementRepository.save(InventoryMovement.builder().movementType("SALE_CANCEL").sku(item.getKey())
+                    .destinationLocationCode(deduction.getLocationCode()).referenceType("ORDER_CANCEL")
+                    .referenceId(request.getOrderId().toString()).quantity(item.getValue()).performedBy("ORDER_SERVICE").build());
+        }
+        deduction.setCancelled(true); deductionRepository.save(deduction);
+    }
+
     private String resolveLocationCode(String branchName) {
         String normalized = Normalizer.normalize(branchName.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
                 .replaceAll("\\p{M}+", "")
@@ -270,6 +386,8 @@ public class InventoryService {
                 .destinationLocationName(transfer.getDestinationLocation().getName())
                 .reason(transfer.getReason())
                 .status(transfer.getStatus().name())
+                .createdBy(transfer.getCreatedBy())
+                .receivedBy(transfer.getReceivedBy())
                 .createdAt(transfer.getCreatedAt())
                 .dispatchedAt(transfer.getDispatchedAt())
                 .receivedAt(transfer.getReceivedAt())

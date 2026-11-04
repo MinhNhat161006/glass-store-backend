@@ -11,6 +11,10 @@ import org.springframework.web.bind.annotation.RequestBody;
         url = "${services.catalog-service.url:http://localhost:8082}"
 )
 public interface CatalogInventoryClient {
+    @PostMapping("/internal/inventory/sales/cancel")
+    void cancelSale(@RequestBody CatalogStockDeductionRequest request);
+    @PostMapping("/internal/inventory/sales/check")
+    void checkAvailability(@RequestBody com.glassstore.order.dto.StockCheckRequest request);
 
     @PostMapping("/internal/inventory/sales/deduct")
     CatalogStockDeductionResponse deductPaidOrder(@RequestBody CatalogStockDeductionRequest request);

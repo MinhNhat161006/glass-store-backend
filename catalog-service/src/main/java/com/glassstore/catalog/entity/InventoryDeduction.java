@@ -27,6 +27,8 @@ public class InventoryDeduction {
     @Column(name = "order_id", nullable = false, unique = true)
     private Long orderId;
 
+    private Boolean cancelled = false;
+
     @Column(name = "idempotency_key", nullable = false, unique = true, length = 100)
     private String idempotencyKey;
 

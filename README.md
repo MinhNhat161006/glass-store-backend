@@ -1,14 +1,14 @@
 # GlassStore Backend - Omnichannel Eyewear Retail Microservices
 
-Dự án Backend xây dựng trên nền tảng **Java 21 (LTS)**, **Spring Boot 3.4.3**, **Spring Cloud 2024.0.0**, **Spring Data JPA**, và **MySQL 8.0**, phục vụ toàn bộ nghiệp vụ chuỗi bán lẻ mắt kính đa kênh (Omnichannel) theo tiêu chuẩn SRS.
+Dự án Backend xây dựng trên nền tảng **Java 21 (LTS)**, **Spring Boot 3.5.16**, **Spring Cloud 2025.0.3**, **Spring Data JPA**, và **MySQL 8.0**, phục vụ toàn bộ nghiệp vụ chuỗi bán lẻ mắt kính đa kênh (Omnichannel) theo tiêu chuẩn SRS.
 
 ---
 
 ## 1. Công nghệ sử dụng (Tech Stack)
 
 - **Ngôn ngữ:** Java 21 (LTS)
-- **Framework:** Spring Boot 3.4.3
-- **Kiến trúc phân tán:** Spring Cloud 2024.0.0
+- **Framework:** Spring Boot 3.5.16
+- **Kiến trúc phân tán:** Spring Cloud 2025.0.3
   - **API Gateway:** Spring Cloud Gateway (Port 8080 - Single Entry Point, Netty Reactive)
   - **Inter-service Communication:** Spring Cloud OpenFeign (Declarative REST Client)
 - **Cơ sở dữ liệu:** MySQL 8.0 (Logical Database Isolation: 1 MySQL Server chứa 4 Schemas độc lập)
@@ -66,8 +66,8 @@ backend/
 
 ## 3. Yêu cầu môi trường (Prerequisites)
 
-- **Java JDK:** 21 trở lên (khuyến nghị OpenJDK 21 LTS hoặc Eclipse Temurin 21)
-- **Maven:** 3.8+ (hoặc dùng Maven wrapper trong IDE)
+- **Java JDK:** 21 (khuyến nghị OpenJDK 21 LTS hoặc Eclipse Temurin 21)
+- **Maven:** 3.9+ (hoặc dùng Maven wrapper tương thích với Maven 3.9+)
 - **Docker & Docker Compose:** Đã cài đặt Docker Desktop hoặc Docker Engine để chạy MySQL
 
 ---
@@ -108,11 +108,11 @@ Container MySQL 8.0 sẽ tự động bật trên cổng `3306` và tự động
 
 | Email đăng nhập | Tên người dùng | Vai trò (Role) | Chức năng kiểm thử |
 | :--- | :--- | :--- | :--- |
-| `admin@glassstore.com` | Quản Trị Viên | `ROLE_ADMIN` | Quản trị toàn hệ thống, cấu hình |
-| `staff@glassstore.com` | Nguyễn Bán Hàng | `ROLE_SALES_STAFF` | Bán hàng trực tiếp tại quầy POS |
-| `optometrist@glassstore.com` | Bác Sĩ Trần Đo Mắt | `ROLE_OPTOMETRIST` | Nhập kết quả đo khúc xạ OD/OS |
-| `lab@glassstore.com` | Lê Kỹ Thuật Xưởng Mài | `ROLE_LAB_TECH` | Đổi trạng thái mài kính & kiểm định QC |
-| `customer@gmail.com` | Phạm Khách Hàng | `ROLE_CUSTOMER` | Đăng nhập mua kính online trên Web |
+| `adminoptic@gmail.com` | Admin | `ROLE_ADMIN` | Quản trị toàn hệ thống, cấu hình |
+| `posoptic@gmail.com` | Nguyễn Văn Nam | `ROLE_SALES_STAFF` | Bán hàng trực tiếp tại quầy POS |
+| `optometryoptic@gmail.com` | Lê Thị Ánh Tuyết | `ROLE_OPTOMETRIST` | Nhập kết quả đo khúc xạ OD/OS |
+| `laboptic@gmail.com` | Trần Văn Tuấn | `ROLE_LAB_TECH` | Đổi trạng thái mài kính & kiểm định QC |
+| `customer@gmail.com` | Nguyễn Hoàng Duy | `ROLE_CUSTOMER` | Đăng nhập mua kính online trên Web |
 
 **Dữ liệu sản phẩm mẫu có sẵn (50 chiếc tồn kho mỗi loại):**
 - Gọng kính Titanium Bolon (`FRM-BOLON-BLK`, `FRM-BOLON-SIL`)
@@ -167,8 +167,13 @@ Base URL Gateway: `http://localhost:8080`
 | `POST` | `/api/auth/send-otp` | `identity-service` | Gửi mã OTP xác thực qua Google SMTP | 200 OK |
 | `GET` | `/api/products` | `catalog-service` | Lấy danh sách kính (bộ lọc giá, kiểu dáng, chất liệu) | 200 OK |
 | `GET` | `/api/products/{id}` | `catalog-service` | Xem chi tiết gọng/tròng/kính râm | 200 OK |
-| `POST` | `/api/orders` | `order-pos-service` | Tạo đơn hàng đặt kính Online | 201 Created |
-| `POST` | `/api/pos/checkout` | `order-pos-service` | Bán hàng trực tiếp tại quầy POS | 200 OK |
+| `POST` | `/api/orders` | `order-pos-service` | Tạo đơn hàng đặt kính Online (cần `Idempotency-Key`) | 201 Created |
+| `GET` | `/api/cart` | `order-pos-service` | Lấy / tạo giỏ hàng khách | 200 OK |
+| `POST` | `/api/cart/items` | `order-pos-service` | Thêm SKU vào giỏ | 201 Created |
+| `POST` | `/api/cart/checkout` | `order-pos-service` | Đặt hàng từ giỏ | 201 Created |
+| `POST` | `/api/pos/sessions` | `order-pos-service` | Mở phiên bán hàng POS | 201 Created |
+| `POST` | `/api/pos/checkout` | `order-pos-service` | Bán hàng tại quầy (CASH settle ngay) | 201 Created |
+| `POST` | `/api/payments/callback` | `order-pos-service` | Webhook cổng thanh toán (chưa cấu hình provider) | 200 OK |
 | `POST` | `/api/prescriptions` | `eyewear-lab-service`| Lưu thông số đo mắt OD/OS cho khách hàng | 201 Created |
 | `GET` | `/api/lab-jobs` | `eyewear-lab-service`| Lấy danh sách kính chờ mài lắp tại xưởng | 200 OK |
 | `PATCH`| `/api/lab-jobs/{id}/status`| `eyewear-lab-service`| Cập nhật trạng thái gia công (Mài/QC/Bàn giao)| 200 OK |
@@ -184,11 +189,13 @@ Base URL Gateway: `http://localhost:8080`
 | `GET` | `/api/inventory` | Tồn từng SKU theo ba địa điểm |
 | `GET` | `/api/inventory/locations` | Danh sách địa điểm |
 | `GET` | `/api/inventory/transfers` | Danh sách phiếu điều chuyển |
-| `POST` | `/api/inventory/transfers` | Tạo phiếu chờ xuất, nguồn cố định là LAB |
-| `PATCH` | `/api/inventory/transfers/{id}/dispatch` | Kiểm tra nguyên tử và trừ tồn LAB, chuyển sang `IN_TRANSIT` |
-| `PATCH` | `/api/inventory/transfers/{id}/receive` | Cộng tồn chi nhánh và chuyển sang `RECEIVED` |
+| `GET` | `/api/inventory/movements` | Tra cứu lịch sử biến động (lọc tùy chọn theo SKU, địa điểm, mã tham chiếu; tối đa 100 dòng/trang) |
+| `POST` | `/api/inventory/transfers` | Tạo phiếu `PENDING` với kho nguồn, kho đích và các SKU |
+| `PATCH` | `/api/inventory/transfers/{id}/receive` | Xác nhận nhận hàng và cập nhật cả hai kho nguyên tử |
 
-Tạo phiếu chưa làm thay đổi tồn; việc xuất kho kiểm tra lại số dư bằng câu lệnh cập nhật có điều kiện trong database. Chỉ phiếu `IN_TRANSIT` mới nhận được; các bước cập nhật tồn, trạng thái và lịch sử biến động nằm trong transaction catalog. Lịch sử được lưu trong bảng `inventory_movements`.
+Tạo phiếu không giữ hàng và chưa làm thay đổi tồn. Khi nhận phiếu `PENDING`, catalog kiểm tra lại số dư nguồn bằng câu lệnh cập nhật có điều kiện, trừ kho nguồn, cộng kho đích, cập nhật trạng thái và ghi lịch sử xuất/nhập trong cùng transaction. Khóa phiếu ngăn xác nhận đồng thời hoặc lặp lại. JWT và vai trò `ROLE_ADMIN`/`ROLE_LAB` bảo vệ các API inventory, tương ứng với quyền của route `/stock-transfer` trên portal. Hệ thống hiện chưa có phân quyền theo từng chi nhánh, nên các vai trò được phép thấy các địa điểm đang hoạt động.
+
+Các bản ghi `IN_TRANSIT` đã tạo theo luồng GS-23 cũ vẫn nhận được: vì tồn nguồn đã bị trừ khi xuất, bước nhận chỉ cộng kho đích và đồng bộ lại tổng tồn SKU, không trừ nguồn lần nữa. API `dispatch` cũ không còn được dùng cho phiếu mới. Lịch sử địa điểm được lưu trong `inventory_movements` và có thể tra cứu qua endpoint ở trên.
 
 POS gửi `Idempotency-Key` cho `POST /api/orders`. `order-pos-service` gọi endpoint nội bộ `POST /internal/inventory/sales/deduct` trên cổng nội bộ của catalog-service; endpoint này không được định tuyến qua API Gateway. Địa điểm bán được xác định từ nhãn chi nhánh hiện tại; nhãn không khớp địa điểm đã hỗ trợ bị từ chối, không trừ vào kho mặc định.
 
