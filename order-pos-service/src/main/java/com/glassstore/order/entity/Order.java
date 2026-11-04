@@ -82,6 +82,10 @@ public class Order {
     @Builder.Default
     private OrderStatus status = OrderStatus.PENDING_PAYMENT;
 
+    @Column(name = "tax_amount", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal taxAmount = BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", length = 20)
     private PaymentMethod paymentMethod;
@@ -131,4 +135,7 @@ public class Order {
     public OrderStatus currentStatus() {
         return status == null ? OrderStatus.PENDING_PAYMENT : status;
     }
+
+    @Transient
+    private String inventorySyncStatus;
 }

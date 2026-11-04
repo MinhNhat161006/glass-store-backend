@@ -13,4 +13,6 @@ public class CreateStaffRequest {
     private String employeeCode;
     private String branchName;
     private String roleName;
+    private String status;
+    private String password;
 }

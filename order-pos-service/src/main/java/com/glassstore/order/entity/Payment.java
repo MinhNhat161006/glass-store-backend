@@ -48,6 +48,9 @@ public class Payment {
     @Column(name = "amount", precision = 14, scale = 2, nullable = false)
     private BigDecimal amount;
 
+    @Column(name = "idempotency_key", unique = true, length = 100)
+    private String idempotencyKey;
+
     /** Gateway name, e.g. VNPAY. Null for CASH, which has no external provider. */
     @Column(name = "provider", length = 40)
     private String provider;

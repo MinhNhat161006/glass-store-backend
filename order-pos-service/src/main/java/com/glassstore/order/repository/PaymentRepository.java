@@ -10,7 +10,6 @@ import java.util.Optional;
 
 @Repository
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
-
     List<Payment> findByOrderIdOrderByCreatedAtDesc(Long orderId);
 
     /** BR-15 guard: is there already a verified success for this order? */
@@ -19,4 +18,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     boolean existsByOrderIdAndStatus(Long orderId, PaymentStatus status);
 
     Optional<Payment> findByProviderAndExternalTransactionId(String provider, String externalTransactionId);
+
+    List<Payment> findByOrderId(Long orderId);
+    Optional<Payment> findByIdempotencyKey(String idempotencyKey);
 }

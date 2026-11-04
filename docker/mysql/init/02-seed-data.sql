@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS `users` (
     `employee_code` VARCHAR(50) NULL,
     `branch_name` VARCHAR(100) DEFAULT 'Flagship Q.1 (TP.HCM)',
     `status` VARCHAR(20) DEFAULT 'ACTIVE',
+    `failed_attempts` INT DEFAULT 0,
+    `lockout_expiration` TIMESTAMP NULL DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -49,20 +51,20 @@ ON DUPLICATE KEY UPDATE `description` = VALUES(`description`);
 -- Nạp Users mẫu (Mật khẩu mặc định: 123456 -> mã hóa BCrypt: $2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi)
 INSERT INTO `users` (`id`, `username`, `email`, `password_hash`, `full_name`, `phone_number`, `employee_code`, `branch_name`, `status`) VALUES
 -- Ban Quản Trị & Cửa Hàng Trưởng
-(1, 'admin', 'admin@optivision.vn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Trần Quản Trị', '0901000001', 'STF-001', 'Trụ Sở Chính (Headquarter)', 'ACTIVE'),
+(1, 'admin', 'adminoptic@gmail.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Admin', '0901000001', 'ADM-001', 'Trụ Sở Chính (Headquarter)', 'ACTIVE'),
 (2, 'manager_nam', 'nam.le@optivision.vn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Lê Hoàng Nam (Store Manager)', '0901000014', 'STF-014', 'Tràng Tiền Plaza (Hà Nội)', 'ACTIVE'),
 
 -- Nhân Viên Bán Hàng & Thu Ngân POS
-(3, 'staff', 'staff@optivision.vn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Nguyễn Bán Hàng (POS)', '0901000002', 'STF-088', 'Flagship Q.1 (TP.HCM)', 'ACTIVE'),
+(3, 'staff', 'posoptic@gmail.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Nguyễn Văn Nam', '0901000002', 'NV-001', 'Flagship Q.1 (TP.HCM)', 'ACTIVE'),
 (4, 'staff_ha', 'ha.le@optivision.vn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Lê Văn Hà (POS Tràng Tiền)', '0912345678', 'STF-012', 'Tràng Tiền Plaza (Hà Nội)', 'ACTIVE'),
 (5, 'staff_vy', 'vy.nguyen@optivision.vn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Nguyễn Thảo Vy (Thủ Kho)', '0903112233', 'STF-092', 'Thảo Điền Store (Q.2)', 'ACTIVE'),
 
 -- Bác Sĩ & KTV Đo Khúc Xạ Nhãn Khoa
-(6, 'optometrist', 'optometrist@optivision.vn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'BS. CKI Vũ Anh Tuấn', '0901000003', 'STF-021', 'Flagship Q.1 (TP.HCM)', 'ACTIVE'),
+(6, 'optometrist', 'optometryoptic@gmail.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Lê Thị Ánh Tuyết', '0901000003', 'KTV-001', 'Flagship Q.1 (TP.HCM)', 'ACTIVE'),
 (7, 'optom_phuc', 'phuc.lam@optivision.vn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'BS. Lâm Hoàng Phúc', '0908889999', 'STF-102', 'Flagship Q.1 (TP.HCM)', 'ACTIVE'),
 
 -- Kỹ Thuật Viên Xưởng Lab Mài Lắp
-(8, 'labtech', 'lab@optivision.vn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Trần Văn Bách (KTV Lab)', '0901000004', 'STF-045', 'Lab Flagship Q.1', 'ACTIVE'),
+(8, 'labtech', 'laboptic@gmail.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Trần Văn Tuấn', '0901000004', 'LAB-001', 'Lab Flagship Q.1', 'ACTIVE'),
 (9, 'lab_dinh', 'dinh.nguyen@optivision.vn', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'Nguyễn Văn Định (KTV QC)', '0988776655', 'STF-078', 'Lab Tràng Tiền HN', 'ACTIVE'),
 
 -- Khách Hàng Thành Viên Đa Kênh
@@ -121,6 +123,8 @@ CREATE TABLE IF NOT EXISTS `products` (
     `product_type` ENUM('FRAME', 'LENS', 'SUNGLASSES', 'ACCESSORY') NOT NULL,
     `description` TEXT,
     `status` VARCHAR(20) DEFAULT 'ACTIVE',
+    `failed_attempts` INT DEFAULT 0,
+    `lockout_expiration` TIMESTAMP NULL DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT `fk_products_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`),
@@ -142,6 +146,8 @@ CREATE TABLE IF NOT EXISTS `product_variants` (
     `stock_quantity` INT NOT NULL DEFAULT 50,
     `image_url` VARCHAR(500),
     `status` VARCHAR(20) DEFAULT 'ACTIVE',
+    `failed_attempts` INT DEFAULT 0,
+    `lockout_expiration` TIMESTAMP NULL DEFAULT NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT `fk_variants_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE

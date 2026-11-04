@@ -1,16 +1,17 @@
 package com.glassstore.lab.config;
 
+import com.glassstore.lab.entity.EyeExamAppointment;
 import com.glassstore.lab.entity.Prescription;
 import com.glassstore.lab.repository.EyeExamAppointmentRepository;
-import com.glassstore.lab.repository.LabJobRepository;
 import com.glassstore.lab.repository.PrescriptionRepository;
-import com.glassstore.lab.repository.WarrantyRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -18,8 +19,6 @@ import java.math.BigDecimal;
 public class LabDataInitializer implements CommandLineRunner {
 
     private final PrescriptionRepository prescriptionRepository;
-    private final LabJobRepository labJobRepository;
-    private final WarrantyRepository warrantyRepository;
     private final EyeExamAppointmentRepository appointmentRepository;
 
     @Override

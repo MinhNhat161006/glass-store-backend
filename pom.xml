@@ -10,7 +10,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>GlassStore :: Backend Monorepo</name>
-    <description>Omnichannel Eyewear Retail Management System</description>
+    <description>Omnichannel Eyewear Retail &amp; Eyecare Management Microservices</description>
 
     <modules>
         <module>common-lib</module>
@@ -104,6 +104,13 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <version>${spring-boot.version}</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
             </plugins>
         </pluginManagement>

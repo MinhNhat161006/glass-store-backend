@@ -21,9 +21,8 @@ public class LabJob {
     @Column(name = "order_id", nullable = false, unique = true)
     private Long orderId;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "prescription_id", nullable = false)
-    private Prescription prescription;
+    @Column(name = "prescription_id", nullable = false)
+    private Long prescriptionId;
 
     @Column(name = "frame_sku", length = 100)
     private String frameSku;
@@ -31,11 +30,19 @@ public class LabJob {
     @Column(name = "frame_name")
     private String frameName;
 
+    @Column(name = "customer_name")
+    private String customerName;
+
     @Column(name = "lens_sku", length = 100)
     private String lensSku;
 
     @Column(name = "lens_name")
     private String lensName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 50, nullable = false)
+    @Builder.Default
+    private LabJobStatus status = LabJobStatus.PENDING;
 
     @Column(name = "technician_id")
     private Long technicianId;
@@ -43,12 +50,17 @@ public class LabJob {
     @Column(name = "technician_name")
     private String technicianName;
 
-    @Column(length = 50)
-    @Builder.Default
-    private String status = "WAITING_PROCESS"; // WAITING_PROCESS, IN_PROGRESS, QC_CHECK, QC_PASSED, QC_FAILED, READY_FOR_DELIVERY
+    @Column(name = "technician_notes", length = 500)
+    private String technicianNotes;
 
     @Column(name = "qc_notes", length = 500)
     private String qcNotes;
+
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
 
     @Column(name = "created_at", updatable = false)
     @Builder.Default
@@ -57,5 +69,22 @@ public class LabJob {
     @Column(name = "updated_at")
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
-}
 
+    @PrePersist
+    protected void onCreate() {
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
+        if (this.updatedAt == null) {
+            this.updatedAt = LocalDateTime.now();
+        }
+        if (this.status == null) {
+            this.status = LabJobStatus.PENDING;
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+}
