@@ -17,6 +17,8 @@ public class StockTransferDTO {
     private String destinationLocationName;
     private String reason;
     private String status;
+    private String createdBy;
+    private String receivedBy;
     private LocalDateTime createdAt;
     private LocalDateTime dispatchedAt;
     private LocalDateTime receivedAt;
