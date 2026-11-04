@@ -19,6 +19,7 @@ public class ProductVariantDTO {
     private String lensIndex;
     private BigDecimal price;
     private Integer stockQuantity;
+    private Integer availableQuantity;
     private String imageUrl;
     private String status;
 }

@@ -2,6 +2,8 @@ package com.glassstore.order.controller;
 
 import com.glassstore.common.dto.ApiResponse;
 import com.glassstore.order.domain.OrderStatus;
+import com.glassstore.order.domain.PaymentMethod;
+import com.glassstore.order.domain.SalesChannel;
 import com.glassstore.order.dto.OrderDtos;
 import com.glassstore.order.entity.Order;
 import com.glassstore.order.entity.OrderStatusHistory;
@@ -18,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Order API for both the storefront and the internal portal.
@@ -93,14 +96,44 @@ public class OrderController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody OrderDtos.CheckoutRequest request) {
 
-        OrderCheckoutService.CheckoutOutcome outcome =
-                checkoutService.checkout(request, idempotencyKey);
+        prepareCounterSale(request);
+        SalesChannel channel = SalesChannel.parse(request.getChannel());
+        String key = idempotencyKey;
+        if ((key == null || key.isBlank()) && channel == SalesChannel.POS) {
+            key = "POS-" + UUID.randomUUID();
+        }
+
+        OrderCheckoutService.CheckoutOutcome outcome = checkoutService.checkout(request, key);
+        Order order = outcome.order();
+
+        // F10 at the counter confirms cash, card, or an in-store QR transfer.
+        if (channel == SalesChannel.POS
+                && order.currentStatus() == OrderStatus.PENDING_PAYMENT
+                && (order.getPaymentMethod() == PaymentMethod.CASH
+                || order.getPaymentMethod() == PaymentMethod.CARD
+                || order.getPaymentMethod() == PaymentMethod.VIETQR)) {
+            String actor = request.getStaffName() == null || request.getStaffName().isBlank()
+                    ? "POS" : request.getStaffName();
+            if (order.getPaymentMethod() == PaymentMethod.CASH) {
+                order = checkoutService.settleCash(order.getId(), actor);
+            } else {
+                String reason = order.getPaymentMethod() == PaymentMethod.VIETQR
+                        ? "Đã xác nhận nhận tiền chuyển khoản tại quầy"
+                        : "Thu qua máy POS tại quầy";
+                order = checkoutService.markPaid(order, actor, reason, order.getPaymentMethod().name());
+            }
+        }
+        if (order.getItems() != null) {
+            order.getItems().size();
+        }
 
         HttpStatus status = outcome.replayed() ? HttpStatus.OK : HttpStatus.CREATED;
         String message = outcome.replayed()
                 ? "Đơn hàng đã được tạo trước đó (yêu cầu được gửi lại)"
-                : "Tạo đơn hàng thành công";
-        return ResponseEntity.status(status).body(ApiResponse.success(message, outcome.order()));
+                : (channel == SalesChannel.POS
+                ? "Thanh toán tại quầy thành công"
+                : "Tạo đơn hàng thành công");
+        return ResponseEntity.status(status).body(ApiResponse.success(message, order));
     }
 
     /** Staff confirms cash received at the counter (FR-PAY-04). */
@@ -135,6 +168,63 @@ public class OrderController {
                 .orElseThrow(() -> com.glassstore.common.exception.ApiException.of(
                         com.glassstore.common.exception.ErrorCode.ORDER_NOT_FOUND,
                         "Không tìm thấy đơn hàng ID: " + id));
+    }
+
+    /**
+     * POS payload from the portal historically used {@code skuId} and omitted walk-in phone /
+     * order type. Normalize here so {@code POST /api/orders} remains the cashier endpoint.
+     */
+    private void prepareCounterSale(OrderDtos.CheckoutRequest request) {
+        if (request.getChannel() == null || request.getChannel().isBlank()) {
+            return;
+        }
+        SalesChannel channel;
+        try {
+            channel = SalesChannel.parse(request.getChannel());
+        } catch (IllegalArgumentException ex) {
+            return;
+        }
+        if (channel != SalesChannel.POS) {
+            return;
+        }
+        request.setAcceptPriceChange(true);
+        if (request.getCustomerName() == null || request.getCustomerName().isBlank()) {
+            request.setCustomerName("Khách vãng lai");
+        }
+        if (request.getCustomerPhone() == null || request.getCustomerPhone().isBlank()) {
+            request.setCustomerPhone("0000000000");
+        }
+        if (request.getOrderType() == null || request.getOrderType().isBlank()) {
+            request.setOrderType(inferPosOrderType(request));
+        }
+    }
+
+    private String inferPosOrderType(OrderDtos.CheckoutRequest request) {
+        boolean lens = false;
+        boolean frame = false;
+        boolean accessory = false;
+        if (request.getItems() != null) {
+            for (OrderDtos.CheckoutLine line : request.getItems()) {
+                String sku = line.getSku() == null ? "" : line.getSku().toUpperCase();
+                if (sku.startsWith("LNS-") || sku.startsWith("LZ-")) {
+                    lens = true;
+                } else if (sku.startsWith("ACC-")) {
+                    accessory = true;
+                } else {
+                    frame = true;
+                }
+            }
+        }
+        if (request.getPrescriptionId() != null && (lens || frame)) {
+            return lens && !frame ? "LENS_ONLY" : "COMPLETE_GLASSES";
+        }
+        if (accessory && !frame && !lens) {
+            return "ACCESSORY";
+        }
+        if (lens && !frame) {
+            return "ACCESSORY";
+        }
+        return "FRAME_ONLY";
     }
 
     private void assertOwner(Order order, Long customerId) {

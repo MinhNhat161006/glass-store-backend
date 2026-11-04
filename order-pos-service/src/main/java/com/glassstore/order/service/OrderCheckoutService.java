@@ -74,9 +74,15 @@ public class OrderCheckoutService {
                     "Đơn kính thuốc bắt buộc phải có toa kính đã được xác nhận");
         }
 
-        if (request.getCustomerName() == null || request.getCustomerName().isBlank()
-                || request.getCustomerPhone() == null || request.getCustomerPhone().isBlank()) {
-            throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Thiếu thông tin khách hàng");
+        if (request.getCustomerName() == null || request.getCustomerName().isBlank()) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Thiếu tên khách hàng");
+        }
+        if (channel != SalesChannel.POS
+                && (request.getCustomerPhone() == null || request.getCustomerPhone().isBlank())) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Thiếu số điện thoại khách hàng");
+        }
+        if (request.getCustomerPhone() == null || request.getCustomerPhone().isBlank()) {
+            request.setCustomerPhone("0000000000");
         }
 
         String orderCode = nextOrderCode();

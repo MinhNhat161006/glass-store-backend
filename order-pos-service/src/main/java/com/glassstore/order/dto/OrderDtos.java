@@ -19,6 +19,7 @@ public final class OrderDtos {
     @Builder
     public static class CheckoutLine {
         @NotBlank(message = "SKU không được để trống")
+        @com.fasterxml.jackson.annotation.JsonAlias({"skuId", "sku_id"})
         private String sku;
 
         @NotNull(message = "Số lượng không được để trống")
@@ -40,7 +41,7 @@ public final class OrderDtos {
         @NotBlank(message = "Tên khách hàng không được để trống")
         private String customerName;
 
-        @NotBlank(message = "Số điện thoại không được để trống")
+        /** Walk-in POS customers may omit a phone; online checkout still requires it. */
         private String customerPhone;
 
         private String shippingAddress;
