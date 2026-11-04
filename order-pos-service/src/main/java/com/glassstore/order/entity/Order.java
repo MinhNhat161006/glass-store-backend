@@ -59,7 +59,7 @@ public class Order {
     @Builder.Default
     private BigDecimal taxAmount = BigDecimal.ZERO;
 
-    @Column(name = "status")
+    @Column(name = "status", columnDefinition = "varchar(32)")
     @Builder.Default
     private String status = "PAID";
 
@@ -73,6 +73,23 @@ public class Order {
     @Column(name = "branch_name")
     @Builder.Default
     private String branchName = "Flagship Q.1 (TP.HCM)";
+
+    private String branchCode;
+
+    private String voucherCode;
+    private Long voucherId;
+    private BigDecimal voucherDiscount;
+    private Long pointsToUse;
+    private Long redeemedPoints;
+    private BigDecimal pointsDiscount;
+    private BigDecimal pointUnitValue;
+    private String cancelReason;
+    private String cancelledBy;
+    private LocalDateTime cancelledAt;
+    private String refundStatus;
+    private BigDecimal cashReceived;
+    private String refundConfirmedBy;
+    private LocalDateTime refundConfirmedAt;
 
     @Column(name = "notes")
     private String notes;

@@ -34,7 +34,7 @@ public class Payment {
     @Column(name = "amount", precision = 12, scale = 2, nullable = false)
     private BigDecimal amount;
 
-    @Column(name = "status")
+    @Column(name = "status", columnDefinition = "varchar(32)")
     @Builder.Default
     private String status = "SUCCESS";
 

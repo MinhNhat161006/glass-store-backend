@@ -14,8 +14,19 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 public class InventoryController {
+    @PostMapping("/internal/inventory/sales/check")
+    public ResponseEntity<Void> checkAvailability(@Valid @RequestBody StockCheckRequest request) {
+        inventoryService.checkAvailability(request);
+        return ResponseEntity.noContent().build();
+    }
 
     private final InventoryService inventoryService;
+
+    @PostMapping("/internal/inventory/sales/cancel")
+    public ResponseEntity<Void> cancelSale(@Valid @RequestBody StockDeductionRequest request) {
+        inventoryService.cancelSale(request);
+        return ResponseEntity.noContent().build();
+    }
 
     @GetMapping("/api/inventory")
     public ResponseEntity<ApiResponse<List<InventoryRowDTO>>> getInventory() {

@@ -6,6 +6,7 @@ import com.glassstore.order.entity.Payment;
 import com.glassstore.order.repository.OrderRepository;
 import com.glassstore.order.repository.PaymentRepository;
 import com.glassstore.order.service.StockDeductionService;
+import com.glassstore.order.service.SalesBranch;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 import java.math.RoundingMode;
@@ -27,10 +29,17 @@ import java.math.RoundingMode;
 @Slf4j
 @CrossOrigin(origins = "*")
 public class OrderController {
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, String>> handleBusinessError(ResponseStatusException error) {
+        return ResponseEntity.status(error.getStatusCode()).body(Map.of("message", error.getReason() == null ? "Yêu cầu không hợp lệ." : error.getReason()));
+    }
 
+    private final com.glassstore.order.service.OrderService orderService;
+    private final com.glassstore.order.service.OrderCancellationService cancellations;
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final StockDeductionService stockDeductionService;
+    private final com.glassstore.order.client.CatalogInventoryClient catalogInventoryClient;
 
     @GetMapping
     public ResponseEntity<List<Order>> getAllOrders() {
@@ -40,7 +49,7 @@ public class OrderController {
     @GetMapping("/{id}")
     public ResponseEntity<Order> getOrderById(@PathVariable("id") Long id) {
         return orderRepository.findById(id)
-                .map(ResponseEntity::ok)
+                .map(order -> { order.setInventorySyncStatus(stockDeductionService.statusForOrder(order.getId())); return ResponseEntity.ok(order); })
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -52,94 +61,26 @@ public class OrderController {
     }
 
     @PostMapping
-    @Transactional
-    public ResponseEntity<Order> createOrder(
-            @RequestBody Order order,
-            @RequestHeader(name = "Idempotency-Key", required = false) String requestIdempotencyKey) {
-        if (requestIdempotencyKey != null) {
-            if (requestIdempotencyKey.isBlank() || requestIdempotencyKey.length() > 100) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Idempotency-Key không hợp lệ.");
-            }
-            Payment existingPayment = paymentRepository.findByIdempotencyKey(requestIdempotencyKey).orElse(null);
-            if (existingPayment != null) {
-                Order existingOrder = orderRepository.findById(existingPayment.getOrderId())
-                        .orElseThrow(() -> new IllegalStateException("Payment exists without its order."));
-                existingOrder.setInventorySyncStatus(stockDeductionService.statusForOrder(existingOrder.getId()));
-                return ResponseEntity.ok(existingOrder);
-            }
-        }
-        if (order.getId() != null || order.getItems() == null || order.getItems().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn hàng phải có sản phẩm và không được có ID sẵn.");
-        }
-        BigDecimal total = BigDecimal.ZERO;
-        for (OrderItem item : order.getItems()) {
-            if (item == null || item.getSkuId() == null || item.getSkuId().isBlank()
-                    || item.getProductName() == null || item.getProductName().isBlank()
-                    || item.getQuantity() == null || item.getQuantity() <= 0
-                    || item.getUnitPrice() == null || item.getUnitPrice().signum() < 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SKU, tên, số lượng và đơn giá sản phẩm không hợp lệ.");
-            }
-            item.setId(null);
-            item.setSubtotal(item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
-            total = total.add(item.getSubtotal());
-        }
-        BigDecimal discount = order.getDiscountAmount() == null ? BigDecimal.ZERO : order.getDiscountAmount();
-        if (discount.signum() < 0 || discount.compareTo(total) > 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Giảm giá không hợp lệ.");
-        }
-        if ("POS".equalsIgnoreCase(order.getChannel())) {
-            order.setChannel("POS");
-            if (!List.of("CASH", "VIETQR", "CARD").contains(order.getPaymentMethod())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phương thức thanh toán POS không hợp lệ.");
-            }
-            order.setTotalAmount(total);
-            order.setDiscountAmount(discount);
-            order.setTaxAmount(total.subtract(discount).multiply(new BigDecimal("0.08")).setScale(0, RoundingMode.HALF_UP));
-            order.setFinalAmount(total.subtract(discount).add(order.getTaxAmount()));
-            order.setStatus("PAID");
-        }
-        if (order.getCustomerName() == null || order.getCustomerName().isBlank()) order.setCustomerName("Khách vãng lai");
-        if (order.getCustomerPhone() == null) order.setCustomerPhone("");
-        if (order.getOrderCode() == null || order.getOrderCode().isEmpty()) {
-            order.setOrderCode("OPT-" + UUID.randomUUID().toString().toUpperCase());
-        }
-        order.setCreatedAt(LocalDateTime.now());
-        order.setUpdatedAt(LocalDateTime.now());
+    public ResponseEntity<Order> createOrder(@RequestBody Order order,
+            @RequestHeader(name="Idempotency-Key",required=false) String key,
+            @RequestHeader(name="Authorization",required=false) String token) {
+        return orderService.create(order,key,token);
+    }
 
-        if (order.getItems() != null) {
-            for (OrderItem item : order.getItems()) {
-                item.setOrder(order);
-                if (item.getSubtotal() == null && item.getUnitPrice() != null) {
-                    item.setSubtotal(item.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity() != null ? item.getQuantity() : 1)));
-                }
-            }
-        }
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<Order> cancel(@PathVariable("id") Long id,@RequestBody com.glassstore.order.service.OrderCancellationService.Request request,
+            @RequestHeader(name="Authorization",required=false) String token) {
+        return ResponseEntity.ok(cancellations.cancel(id,request,token));
+    }
 
-        if (order.getFinalAmount() == null && order.getTotalAmount() != null) {
-            order.setFinalAmount(order.getTotalAmount().subtract(discount));
-        }
+    @PostMapping("/{id}/refund-confirm")
+    public ResponseEntity<Order> confirmRefund(@PathVariable("id") Long id,@RequestHeader(name="Authorization",required=false) String token) {
+        return ResponseEntity.ok(cancellations.confirmRefund(id,token));
+    }
 
-        Order saved = orderRepository.save(order);
-
-        // Record payment
-        Payment payment = Payment.builder()
-                .orderId(saved.getId())
-                .paymentMethod(saved.getPaymentMethod() != null ? saved.getPaymentMethod() : "VIETQR")
-                .amount(saved.getFinalAmount() != null ? saved.getFinalAmount() : BigDecimal.ZERO)
-                .transactionCode("TXN-" + UUID.randomUUID().toString().toUpperCase())
-                .idempotencyKey(requestIdempotencyKey != null
-                        ? requestIdempotencyKey
-                        : UUID.randomUUID().toString())
-                .status("SUCCESS")
-                .paidAt(LocalDateTime.now())
-                .build();
-        paymentRepository.save(payment);
-        if ("POS".equalsIgnoreCase(saved.getChannel()) && "SUCCESS".equalsIgnoreCase(payment.getStatus())) {
-            stockDeductionService.enqueue(saved, payment);
-        }
-
-        log.info("Tạo đơn hàng POS thành công: Mã {}", saved.getOrderCode());
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    @PostMapping("/{id}/inventory/retry")
+    public ResponseEntity<Order> retryInventory(@PathVariable("id") Long id, @RequestBody(required = false) Map<String, String> body) {
+        return ResponseEntity.ok(stockDeductionService.retry(id, body == null ? null : body.get("branchCode")));
     }
 
     @PatchMapping("/{id}/status")
@@ -147,6 +88,8 @@ public class OrderController {
             @PathVariable("id") Long id,
             @RequestBody Map<String, String> body) {
         return orderRepository.findById(id).map(o -> {
+            if (body.containsKey("status") && Set.of("CANCELLED","CANCEL_PENDING").contains(body.get("status"))) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Hãy sử dụng API hủy đơn để hoàn kho và quyền lợi.");
+            if (Set.of("CANCELLED","CANCEL_PENDING").contains(o.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT,"Không được đổi trạng thái đơn đã hủy.");
             if (body.containsKey("status")) o.setStatus(body.get("status"));
             o.setUpdatedAt(LocalDateTime.now());
             return ResponseEntity.ok(orderRepository.save(o));

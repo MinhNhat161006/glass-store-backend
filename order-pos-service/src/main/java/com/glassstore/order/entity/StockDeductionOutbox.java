@@ -34,6 +34,9 @@ public class StockDeductionOutbox {
     @Builder.Default
     private String status = "PENDING";
 
+    @Builder.Default
+    private String operation = "DEDUCT";
+
     @Column(nullable = false)
     @Builder.Default
     private Integer attempts = 0;

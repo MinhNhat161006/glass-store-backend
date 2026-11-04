@@ -17,6 +17,18 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class InventoryService {
+    @Transactional(readOnly = true)
+    public void checkAvailability(StockCheckRequest request) {
+        if (!Set.of(BRANCH_01, BRANCH_02).contains(request.branchCode())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chi nhánh POS không hợp lệ.");
+        Map<String, Integer> quantities = new TreeMap<>();
+        request.items().forEach(item -> quantities.merge(item.sku(), item.quantity(), Math::addExact));
+        quantities.forEach((sku, quantity) -> {
+            InventoryBalance balance = balanceRepository.findBySkuAndLocationCode(sku, request.branchCode())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "SKU không có ở chi nhánh: " + sku));
+            if (balance.getQuantity() < quantity || balance.getVariant().getStockQuantity() < quantity)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Không đủ tồn tại chi nhánh cho SKU " + sku);
+        });
+    }
 
     public static final String BRANCH_01 = "BRANCH_01";
     public static final String BRANCH_02 = "BRANCH_02";
@@ -188,6 +200,7 @@ public class InventoryService {
                 .or(() -> deductionRepository.findByIdempotencyKey(request.getIdempotencyKey()));
         if (previous.isPresent()) {
             InventoryDeduction deduction = previous.get();
+            if (Boolean.TRUE.equals(deduction.getCancelled())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Đơn đã hủy, không được trừ kho lại.");
             if (!deduction.getOrderId().equals(request.getOrderId())
                     || !deduction.getIdempotencyKey().equals(request.getIdempotencyKey())
                     || !deduction.getTransactionCode().equals(request.getTransactionCode())
@@ -232,6 +245,28 @@ public class InventoryService {
                     .build());
         }
         return new StockDeductionResponse(request.getOrderId(), locationCode, false);
+    }
+
+    @Transactional
+    public void cancelSale(StockDeductionRequest request) {
+        InventoryDeduction deduction = deductionRepository.findByOrderId(request.getOrderId()).orElse(null);
+        if (deduction == null) {
+            deduction = InventoryDeduction.builder().orderId(request.getOrderId()).idempotencyKey(request.getIdempotencyKey())
+                    .transactionCode(request.getTransactionCode()).locationCode("NONE").build();
+            deduction.setCancelled(true); deductionRepository.saveAndFlush(deduction); return;
+        }
+        if (!deduction.getIdempotencyKey().equals(request.getIdempotencyKey()) || !deduction.getTransactionCode().equals(request.getTransactionCode()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Thông tin hoàn kho không khớp giao dịch gốc.");
+        if (Boolean.TRUE.equals(deduction.getCancelled())) return;
+        TreeMap<String,Integer> items = new TreeMap<>(); request.getItems().forEach(item -> items.merge(item.getSku(),item.getQuantity(),Math::addExact));
+        for (Map.Entry<String,Integer> item : items.entrySet()) {
+            if (balanceRepository.increment(item.getKey(),deduction.getLocationCode(),item.getValue()) != 1 || variantRepository.incrementStock(item.getKey(),item.getValue()) != 1)
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Không tìm thấy tồn gốc để hoàn SKU " + item.getKey());
+            movementRepository.save(InventoryMovement.builder().movementType("SALE_CANCEL").sku(item.getKey())
+                    .destinationLocationCode(deduction.getLocationCode()).referenceType("ORDER_CANCEL")
+                    .referenceId(request.getOrderId().toString()).quantity(item.getValue()).performedBy("ORDER_SERVICE").build());
+        }
+        deduction.setCancelled(true); deductionRepository.save(deduction);
     }
 
     private String resolveLocationCode(String branchName) {

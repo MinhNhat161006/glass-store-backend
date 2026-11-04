@@ -1,0 +1,99 @@
+package com.glassstore.order.service;
+
+import com.glassstore.order.entity.*;
+import com.glassstore.order.repository.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import java.math.*;
+import java.time.LocalDateTime;
+import java.util.*;
+
+@Service @RequiredArgsConstructor
+public class PromotionService {
+    private final VoucherRepository vouchers;
+    private final LoyaltyAccountRepository accounts;
+    private final LoyaltyEntryRepository entries;
+    private final VoucherRedemptionRepository redemptions;
+    private final PosDataService data;
+    private final LoyaltyPolicy policy;
+    public record Quote(BigDecimal subtotal, String voucherCode, BigDecimal voucherDiscount, long redeemedPoints,
+                        BigDecimal pointsDiscount, BigDecimal taxableAmount, BigDecimal vatAmount, BigDecimal finalAmount,
+                        long pointsBalance, long maximumPoints, BigDecimal pointValue) {}
+    private ResponseStatusException invalid(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
+
+    @Transactional
+    public Quote calculate(Order order, String token, boolean consumeLocks) {
+        data.actor(token, false);
+        if (order.getItems() == null || order.getItems().isEmpty()) throw invalid("Giỏ hàng đang trống.");
+        if (order.getCustomerId() != null) data.customer(token, order.getCustomerId());
+        Map<String, BigDecimal> prices = data.catalogPrices();
+        BigDecimal subtotal = BigDecimal.ZERO;
+        for (OrderItem item : order.getItems()) {
+            if (item == null || item.getQuantity() == null || item.getQuantity() < 1 || item.getQuantity() > 10000 || !prices.containsKey(item.getSkuId())) throw invalid("SKU hoặc số lượng không hợp lệ.");
+            BigDecimal price = prices.get(item.getSkuId());
+            if (price.signum() < 0) throw invalid("Đơn giá không hợp lệ.");
+            item.setUnitPrice(price); item.setSubtotal(price.multiply(BigDecimal.valueOf(item.getQuantity())));
+            subtotal = subtotal.add(item.getSubtotal());
+        }
+        String code = order.getVoucherCode() == null ? "" : order.getVoucherCode().trim().toUpperCase(Locale.ROOT);
+        Voucher voucher = null;
+        BigDecimal voucherDiscount = BigDecimal.ZERO;
+        if (!code.isEmpty()) {
+            voucher = (consumeLocks ? vouchers.lockByCode(code) : vouchers.findByCode(code)).orElseThrow(() -> invalid("Mã voucher không tồn tại."));
+            LocalDateTime now = LocalDateTime.now();
+            if (!voucher.isActive() || voucher.getStartsAt() != null && now.isBefore(voucher.getStartsAt()) || voucher.getExpiresAt() != null && !now.isBefore(voucher.getExpiresAt())) throw invalid("Voucher chưa có hiệu lực hoặc đã hết hạn.");
+            if (voucher.isMembersOnly() && order.getCustomerId() == null) throw invalid("Voucher chỉ dành cho thành viên.");
+            if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) throw invalid("Voucher đã hết lượt sử dụng.");
+            if (voucher.getPerCustomerLimit() != null && (order.getCustomerId() == null || redemptions.countByVoucherIdAndCustomerIdAndReversedFalse(voucher.getId(), order.getCustomerId()) >= voucher.getPerCustomerLimit())) throw invalid("Voucher giới hạn lượt dùng theo thành viên.");
+            if (subtotal.compareTo(voucher.getMinimumAmount()) < 0) throw invalid("Đơn hàng chưa đạt giá trị tối thiểu của voucher.");
+            if ("PERCENT".equals(voucher.getType())) voucherDiscount = subtotal.multiply(voucher.getAmount()).divide(new BigDecimal("100"), 0, RoundingMode.HALF_UP);
+            else if ("FIXED".equals(voucher.getType())) voucherDiscount = voucher.getAmount();
+            else throw invalid("Loại voucher không hợp lệ.");
+            if (voucher.getMaximumDiscount() != null) voucherDiscount = voucherDiscount.min(voucher.getMaximumDiscount());
+            voucherDiscount = voucherDiscount.min(subtotal).setScale(0, RoundingMode.DOWN);
+        }
+        long points = order.getPointsToUse() == null ? 0 : order.getPointsToUse();
+        if (points < 0) throw invalid("Số điểm không hợp lệ.");
+        LoyaltyAccount account = order.getCustomerId() == null ? null : (consumeLocks ? accounts.lockByCustomerId(order.getCustomerId()) : accounts.findById(order.getCustomerId())).orElse(null);
+        long balance = account == null ? 0 : account.getBalance();
+        BigDecimal remaining = subtotal.subtract(voucherDiscount);
+        if (policy.getPointValue().signum() <= 0 || policy.getMaxRedemptionPercent() < 0 || policy.getMaxRedemptionPercent() > 100) throw invalid("Cấu hình điểm chưa hợp lệ.");
+        boolean canUsePoints = policy.isEnabled() && order.getCustomerId() != null && (voucher == null || policy.isAllowVoucherStack() && voucher.isStackPoints());
+        long maximum = canUsePoints ? remaining.multiply(BigDecimal.valueOf(policy.getMaxRedemptionPercent())).divide(new BigDecimal("100")).divide(policy.getPointValue(), 0, RoundingMode.DOWN).min(BigDecimal.valueOf(balance)).longValueExact() : 0;
+        if (points > maximum) throw invalid(order.getCustomerId() == null ? "Khách vãng lai không được dùng điểm." : "Số điểm vượt số dư hoặc giới hạn cho phép.");
+        BigDecimal pointsDiscount = policy.getPointValue().multiply(BigDecimal.valueOf(points));
+        BigDecimal taxable = remaining.subtract(pointsDiscount);
+        BigDecimal tax = taxable.multiply(new BigDecimal("0.08")).setScale(0, RoundingMode.HALF_UP);
+        order.setVoucherId(voucher == null ? null : voucher.getId()); order.setVoucherCode(code.isEmpty() ? null : code);
+        order.setVoucherDiscount(voucherDiscount); order.setRedeemedPoints(points); order.setPointsDiscount(pointsDiscount); order.setPointUnitValue(policy.getPointValue());
+        order.setTotalAmount(subtotal); order.setDiscountAmount(voucherDiscount.add(pointsDiscount)); order.setTaxAmount(tax); order.setFinalAmount(taxable.add(tax));
+        return new Quote(subtotal, order.getVoucherCode(), voucherDiscount, points, pointsDiscount, taxable, tax, taxable.add(tax), balance, maximum, policy.getPointValue());
+    }
+
+    public void consume(Order order) {
+        if (order.getVoucherCode() != null) {
+            Voucher voucher = vouchers.lockByCode(order.getVoucherCode()).orElseThrow();
+            voucher.setUsedCount(voucher.getUsedCount()+1); vouchers.save(voucher);
+            VoucherRedemption redemption = new VoucherRedemption(); redemption.setVoucherId(voucher.getId()); redemption.setCustomerId(order.getCustomerId()); redemption.setOrderId(order.getId()); redemptions.save(redemption);
+        }
+        if (order.getRedeemedPoints() != null && order.getRedeemedPoints() > 0) {
+            LoyaltyAccount account = accounts.lockByCustomerId(order.getCustomerId()).orElseThrow();
+            account.setBalance(account.getBalance()-order.getRedeemedPoints()); accounts.save(account);
+            LoyaltyEntry entry = new LoyaltyEntry(); entry.setCustomerId(order.getCustomerId()); entry.setOrderId(order.getId()); entry.setEntryType("REDEEM"); entry.setPoints(-order.getRedeemedPoints()); entry.setReason("POS checkout"); entries.save(entry);
+        }
+    }
+
+    public void reverse(Order order) {
+        // Lock in the same voucher -> account order as checkout.
+        if (order.getVoucherCode() != null) redemptions.findByOrderId(order.getId()).filter(r -> !r.isReversed()).ifPresent(redemption -> {
+            Voucher voucher = vouchers.lockByCode(order.getVoucherCode()).orElseThrow(); voucher.setUsedCount(Math.max(0,voucher.getUsedCount()-1)); vouchers.save(voucher); redemption.setReversed(true); redemptions.save(redemption);
+        });
+        if (order.getRedeemedPoints() != null && order.getRedeemedPoints() > 0) {
+            LoyaltyAccount account = accounts.lockByCustomerId(order.getCustomerId()).orElseThrow(); account.setBalance(Math.addExact(account.getBalance(),order.getRedeemedPoints())); accounts.save(account);
+            LoyaltyEntry entry = new LoyaltyEntry(); entry.setCustomerId(order.getCustomerId()); entry.setOrderId(order.getId()); entry.setEntryType("CANCEL_REFUND"); entry.setPoints(order.getRedeemedPoints()); entry.setReason("POS cancellation"); entries.save(entry);
+        }
+    }
+}
