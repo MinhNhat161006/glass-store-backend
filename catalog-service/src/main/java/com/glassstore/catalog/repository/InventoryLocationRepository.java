@@ -8,5 +8,6 @@ import java.util.Optional;
 
 public interface InventoryLocationRepository extends JpaRepository<InventoryLocation, Long> {
     Optional<InventoryLocation> findByCode(String code);
+    Optional<InventoryLocation> findByCodeAndActiveTrue(String code);
     List<InventoryLocation> findAllByActiveTrueOrderByCodeAsc();
 }
