@@ -1,4 +1,5 @@
 package com.glassstore.order.service;
+import com.glassstore.order.domain.*;
 import com.glassstore.order.entity.*;
 import com.glassstore.order.repository.*;
 import com.glassstore.order.client.CatalogInventoryClient;
@@ -29,14 +30,16 @@ class PosBenefitsIntegrationTest {
     @MockBean PosDataService data;
     @MockBean CatalogInventoryClient catalog;
     @MockBean StockOutboxWorker worker;
+    @MockBean OrderCheckoutService teamCheckout;
+    @MockBean WarrantyActivationService warrantyActivation;
     @BeforeEach void setup() throws Exception {
         when(data.actor(any(),anyBoolean())).thenReturn(new ObjectMapper().readTree("{\"id\":1,\"username\":\"qa\",\"roles\":[\"ROLE_ADMIN\"]}"));
         when(data.catalogPrices()).thenReturn(Map.of("TEST-SKU",new BigDecimal("1000000")));
-        Voucher v=new Voucher();v.setCode("QA10");v.setType("PERCENT");v.setAmount(new BigDecimal("10"));v.setMinimumAmount(new BigDecimal("500000"));v.setMaximumDiscount(new BigDecimal("100000"));v.setUsageLimit(1);v.setExpiresAt(LocalDateTime.now().plusDays(1));vouchers.save(v);
+        Voucher v=new Voucher();v.setCode("QA10");v.setName("QA voucher");v.setType("PERCENT");v.setAmount(new BigDecimal("10"));v.setMinimumAmount(new BigDecimal("500000"));v.setMaximumDiscount(new BigDecimal("100000"));v.setUsageLimit(1);v.setExpiresAt(LocalDateTime.now().plusDays(1));vouchers.save(v);
         LoyaltyAccount account=new LoyaltyAccount();account.setCustomerId(10L);account.setBalance(100);accounts.save(account);
     }
     private Order order() {
-        return Order.builder().channel("POS").branchCode("BRANCH_01").customerId(10L).customerName("QA").customerPhone("").paymentMethod("CASH")
+        return Order.builder().channel(SalesChannel.POS).branchCode("BRANCH_01").customerId(10L).customerName("QA").customerPhone("").paymentMethod(PaymentMethod.CASH)
             .items(new ArrayList<>(List.of(OrderItem.builder().skuId("TEST-SKU").productName("Test glasses").quantity(1).unitPrice(BigDecimal.ONE).build()))).build();
     }
     @Test void quoteDoesNotSpendAndCheckoutAndCancellationAreIdempotent() {
@@ -53,8 +56,8 @@ class PosBenefitsIntegrationTest {
         cancellations.cancel(saved.getId(),new OrderCancellationService.Request("Lặp yêu cầu",false),"Bearer test");
         assertEquals(100,accounts.findById(10L).orElseThrow().getBalance());assertEquals(0,vouchers.findByCode("QA10").orElseThrow().getUsedCount());
         assertEquals(2,entries.findByCustomerIdOrderByCreatedAtDesc(10L).size());
-        assertEquals("REFUND_PENDING",payments.findByOrderId(saved.getId()).get(0).getStatus());
-        cancellations.confirmRefund(saved.getId(),"Bearer test");assertEquals("REFUNDED",payments.findByOrderId(saved.getId()).get(0).getStatus());
+        assertEquals(PaymentStatus.REFUND_PENDING,payments.findByOrderId(saved.getId()).get(0).getStatus());
+        cancellations.confirmRefund(saved.getId(),"Bearer test");assertEquals(PaymentStatus.REFUNDED,payments.findByOrderId(saved.getId()).get(0).getStatus());
     }
     @Test void rejectsGuestPointsExpiredVoucherAndInsufficientCashWithoutSpending() {
         Order guest=order();guest.setCustomerId(null);guest.setPointsToUse(1L);assertThrows(org.springframework.web.server.ResponseStatusException.class,()->promotions.calculate(guest,"Bearer test",false));
@@ -62,5 +65,28 @@ class PosBenefitsIntegrationTest {
         Order request=order();request.setVoucherCode("QA10");assertThrows(org.springframework.web.server.ResponseStatusException.class,()->promotions.calculate(request,"Bearer test",false));
         Order poor=order();poor.setCashReceived(BigDecimal.ONE);assertThrows(org.springframework.web.server.ResponseStatusException.class,()->orders.create(poor,"QA-poor","Bearer test"));
         assertEquals(100,accounts.findById(10L).orElseThrow().getBalance());assertEquals(0,orderRepository.count());
+    }
+
+    @Test void sharedCheckoutDtoPreservesPosBenefitsPrescriptionAndPaymentHooks() throws Exception {
+        var request = new ObjectMapper().readValue("""
+                {"channel":"POS","customerId":10,"customerName":"QA","customerPhone":"",
+                 "paymentMethod":"CASH","orderType":"LENS_ONLY","branchCode":"BRANCH_01",
+                 "prescriptionId":7,"voucherCode":"QA10","pointsToUse":50,"cashReceived":2000000,
+                 "items":[{"skuId":"TEST-SKU","productName":"Test lens","quantity":1,"prescriptionId":7}]}
+                """, com.glassstore.order.dto.OrderDtos.CheckoutRequest.class);
+        Order saved = orders.createCounterSale(request,"QA-shared-dto","Bearer test").getBody();
+        orderRepository.flush();
+        assertEquals(OrderStatus.PAID, saved.getStatus());
+        assertEquals(SalesChannel.POS, saved.getChannel());
+        assertEquals(7L, saved.getPrescriptionId());
+        assertEquals(7L, saved.getItems().get(0).getPrescriptionId());
+        assertEquals(50L, saved.getRedeemedPoints());
+        assertEquals(0, saved.getFinalAmount().compareTo(new BigDecimal("918000")));
+        assertEquals("QA-shared-dto", orderRepository.findByIdempotencyKey("QA-shared-dto").orElseThrow().getIdempotencyKey());
+        verify(teamCheckout).dispatchLabJobIfNeeded(saved);
+        verify(warrantyActivation).enqueueForPaidOrder(saved);
+        orders.createCounterSale(request,"QA-shared-dto","Bearer test");
+        verifyNoMoreInteractions(teamCheckout, warrantyActivation);
+        assertTrue(new ObjectMapper().findAndRegisterModules().writeValueAsString(saved).contains("\"prescriptionId\":7"));
     }
 }

@@ -1,0 +1,21 @@
+# Purchase & Order — Open Business Questions
+
+Nothing below has been invented in code. Each item lists what is implemented *now* and
+what must be confirmed before it can change.
+
+| ID | Question | Related SRS | Current implementation behaviour | Technical impact if changed | Confirmation needed |
+|---|---|---|---|---|---|
+| OQ-01 | Can a customer order online and pick up at a store? | `FR-COM-08` (Should) | Orders carry a free-text `shippingAddress` only. No `fulfillmentMethod` enum is enforced. | Add `FulfillmentMethod` enum + pickup branch FK; affects checkout validation and POS handover. | Operations owner |
+| OQ-02 | Can a customer reserve a product before paying? | `FR-COM-08` reservation policy | Not supported. A reservation only exists as an internal step during checkout. | Needs reservation lifecycle, expiry job, and cancel API. | Product owner |
+| OQ-03 | How long is inventory held for an unpaid online order? | `FR-INV-*` | **No expiry.** A reservation is released only when the order is cancelled or payment fails. | Requires a scheduler + `reservationExpiresAt`; changes `available` formula over time. | Operations owner |
+| OQ-04 | Which payment methods are officially enabled? | `FR-PAY-01..05` | `CASH` and `VNPAY`/`VIETQR` are accepted as enum values. `CASH` is settled immediately by staff action; online methods create a `PENDING` payment. | Enabling/disabling is a config flag; affects checkout validation. | Finance owner |
+| OQ-05 | Which online payment gateway is selected? | `FR-PAY-01`, `FR-PAY-07` | **None.** `PaymentGateway` resolves to `UnconfiguredPaymentGateway`, which returns `PROVIDER_NOT_CONFIGURED`. No callback can succeed. | Implement a real adapter + signature verification + webhook endpoint. | Finance / Tech lead |
+| OQ-06 | Which shipping provider is integrated? | `FR-COM-08` | None. No shipping fee, no carrier, no delivery ETA is calculated. | Add carrier adapter + fee table; affects `finalAmount`. | Operations owner |
+| OQ-07 | Can frames and lenses be bought separately? | `FR-COM-14`, `BR-04` | Yes — `orderType` accepts `FRAME_ONLY`, `LENS_ONLY`, `COMPLETE_GLASSES`, `ACCESSORY`. This mirrors the existing seed data, not a confirmed policy. | If only `COMPLETE_GLASSES` is allowed, checkout must reject the others. | Product owner |
+| OQ-08 | Are external (outside-clinic) prescriptions accepted? | `FR-EYE-*` | Only prescriptions that exist in `db_lab` with a validated `optometristId` can be attached to a lab job. Uploaded external prescriptions are not supported. | Needs document upload + manual verification workflow. | Clinical lead |
+| OQ-09 | Promotion / voucher stacking and usage limits | `FR-COM-06` (Should), `BR-19`, `BR-20` | Validation enforces only: active window + `minOrderAmount` + `maxDiscountAmount` from the voucher row. **No stacking, no per-customer usage cap, no first-order-only rule.** | Add usage counters + stacking policy engine. | Marketing owner |
+| OQ-10 | Cancellation window and who may cancel | `FR-COM-11`, `FR-POS-14` | A customer may request cancellation while status ∈ {`PENDING_PAYMENT`, `PAID`, `PENDING_CONFIRMATION`, `CONFIRMED`}. Staff may cancel up to `PREPARING`. No time limit is enforced. | Add a time window and refund policy branching. | Operations owner |
+| OQ-11 | Refund policy for a paid, cancelled order | `BR-18`, `FR-PAY-09` | Order moves to `REFUND_PENDING`; a `REFUND_PENDING` payment row is recorded. **No money is actually returned** (no gateway). | Needs gateway refund adapter + reconciliation. | Finance owner |
+| OQ-12 | Tax configuration | SRS pricing | No tax field is computed. `totalAmount` is treated as tax-inclusive. | Add tax table + line-level tax if required. | Finance owner |
+| OQ-13 | Should stock be deducted for POS immediately? | `FR-POS-11`, `FR-INV-04` | Yes — POS settlement commits stock immediately (money changes hands in store). | If returns are allowed, need a reversing stock movement. | Operations owner |
+| OQ-14 | Reservation expiry + non-sellable stock source | `BR-08`, `BR-12` | `nonSellableQuantity` exists as a column. `POST /api/variants/adjust` can change actual stock with a reason (BR-12) but does not yet model damaged-goods → non-sellable. | Add a dedicated damaged-goods workflow that writes `nonSellableQuantity`. | Warehouse owner |

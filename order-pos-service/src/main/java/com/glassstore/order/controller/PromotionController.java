@@ -41,6 +41,7 @@ public class PromotionController {
         data.actor(token,true);
         if(voucher.getCode()==null || !voucher.getCode().trim().matches("[a-zA-Z0-9_-]{3,50}") || voucher.getAmount()==null || voucher.getAmount().signum()<=0 || !Set.of("FIXED","PERCENT").contains(voucher.getType()) || "PERCENT".equals(voucher.getType()) && voucher.getAmount().compareTo(new BigDecimal("100"))>0 || voucher.getMinimumAmount()==null || voucher.getMinimumAmount().signum()<0 || voucher.getMaximumDiscount()!=null && voucher.getMaximumDiscount().signum()<0 || voucher.getUsageLimit()!=null && voucher.getUsageLimit()<1 || voucher.getPerCustomerLimit()!=null && voucher.getPerCustomerLimit()<1 || voucher.getStartsAt()!=null && voucher.getExpiresAt()!=null && !voucher.getStartsAt().isBefore(voucher.getExpiresAt())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Cấu hình voucher không hợp lệ.");
         voucher.setCode(voucher.getCode().trim().toUpperCase(Locale.ROOT));
+        if (voucher.getName() == null || voucher.getName().isBlank()) voucher.setName(voucher.getCode());
         if(vouchers.findByCode(voucher.getCode()).isPresent())throw new ResponseStatusException(HttpStatus.CONFLICT,"Mã đã tồn tại.");
         voucher.setId(null);voucher.setUsedCount(0);return vouchers.save(voucher);
     }

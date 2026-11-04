@@ -66,6 +66,8 @@ Catalog lưu dấu hủy kể cả khi yêu cầu trừ kho chưa tới, ngăn t
 ## Kiểm thử
 
 Maven test dùng H2 test riêng:
-`mvn -pl catalog-service,order-pos-service -am -Dspring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect -Dspring.jpa.hibernate.ddl-auto=create-drop test`
+Chạy bằng JDK 25 theo `pom.xml`. Phải chỉ định cả datasource H2, không chỉ đổi dialect/DDL (test upstream có thể dùng datasource MySQL mặc định):
+
+`mvn -pl catalog-service,order-pos-service -am "-Dspring.datasource.url=jdbc:h2:mem:pos-test;MODE=MySQL;DB_CLOSE_DELAY=-1" -Dspring.datasource.driver-class-name=org.h2.Driver -Dspring.datasource.username=sa -Dspring.datasource.password= -Dspring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect -Dspring.jpa.hibernate.ddl-auto=create-drop test`
 
 Đã có test transaction cho quyền lợi/idempotency, hoàn kho đúng một lần và ngăn trừ muộn. Script QA local kiểm tra API/MySQL và trình duyệt, tạo rồi hủy đơn test để hoàn trả số dư và tồn.

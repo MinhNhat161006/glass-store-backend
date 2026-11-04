@@ -1,4 +1,5 @@
 package com.glassstore.order.service;
+import com.glassstore.order.domain.*;
 
 import com.glassstore.order.client.CatalogInventoryClient;
 import com.glassstore.order.dto.CatalogStockDeductionRequest;
@@ -48,7 +49,7 @@ public class StockDeductionService {
     public void processAfterCommit(StockDeductionRequestedEvent event) {
         String status = processOutbox(event.outboxId());
         event.order().setInventorySyncStatus(status);
-        if ("SYNCED".equals(status) && "CANCEL_PENDING".equals(event.order().getStatus())) event.order().setStatus("CANCELLED");
+        if ("SYNCED".equals(status) && (event.order().getStatus() == OrderStatus.CANCEL_PENDING)) event.order().setStatus(OrderStatus.CANCELLED);
     }
 
     @Scheduled(fixedDelayString = "${inventory.outbox.poll-interval-ms:5000}")
@@ -67,7 +68,7 @@ public class StockDeductionService {
     public Order retry(Long orderId, String branchCode) {
         Order order = orderRepository.lockById(orderId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         StockDeductionOutbox outbox = outboxRepository.findByOrderId(orderId).orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Đơn không có yêu cầu đồng bộ kho."));
-        if (!"POS".equals(order.getChannel()) || !"PAID".equals(order.getStatus())) throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ đồng bộ đơn POS đã thanh toán.");
+        if (!(order.getChannel() == SalesChannel.POS) || !(order.getStatus() == OrderStatus.PAID)) throw new ResponseStatusException(HttpStatus.CONFLICT, "Chỉ đồng bộ đơn POS đã thanh toán.");
         if ("SYNCED".equals(outbox.getStatus())) {
             order.setInventorySyncStatus("SYNCED");
             return order;

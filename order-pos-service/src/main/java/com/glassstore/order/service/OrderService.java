@@ -1,4 +1,5 @@
 package com.glassstore.order.service;
+import com.glassstore.order.domain.*;
 
 import com.glassstore.order.entity.Order;
 import com.glassstore.order.entity.OrderItem;
@@ -21,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.math.RoundingMode;
+import com.glassstore.order.dto.OrderDtos;
+import java.util.ArrayList;
 
 @org.springframework.stereotype.Service
 @RequiredArgsConstructor
@@ -32,9 +35,30 @@ public class OrderService {
     private final com.glassstore.order.client.CatalogInventoryClient catalogInventoryClient;
     private final PromotionService promotions;
     private final PosDataService data;
+    private final OrderStatusService orderStatusService;
+    private final OrderCheckoutService teamCheckoutService;
+    private final WarrantyActivationService warrantyActivationService;
+
+    @Transactional
+    public ResponseEntity<Order> createCounterSale(OrderDtos.CheckoutRequest request, String key, String token) {
+        Order order = Order.builder().channel(SalesChannel.POS)
+                .customerId(request.getCustomerId()).customerName(request.getCustomerName())
+                .customerPhone(request.getCustomerPhone()).paymentMethod(PaymentMethod.parse(request.getPaymentMethod()))
+                .orderType(OrderType.parse(request.getOrderType())).prescriptionId(request.getPrescriptionId())
+                .branchName(request.getBranchName()).branchCode(request.getBranchCode())
+                .staffName(request.getStaffName()).posSessionId(request.getPosSessionId()).notes(request.getNotes())
+                .voucherCode(request.getVoucherCode()).pointsToUse(request.getPointsToUse())
+                .cashReceived(request.getCashReceived()).items(new ArrayList<>()).build();
+        for (OrderDtos.CheckoutLine line : request.getItems()) {
+            order.getItems().add(OrderItem.builder().skuId(line.getSku()).productName(line.getProductName() == null ? line.getSku() : line.getProductName())
+                    .quantity(line.getQuantity()).prescriptionId(line.getPrescriptionId()).build());
+        }
+        return create(order, key, token);
+    }
+
     @Transactional
     public ResponseEntity<Order> create(Order order, String requestIdempotencyKey, String token) {
-        if ("POS".equalsIgnoreCase(order.getChannel())) data.actor(token,false);
+        if (order.getChannel() == SalesChannel.POS) data.actor(token,false);
         if (requestIdempotencyKey != null) {
             if (requestIdempotencyKey.isBlank() || requestIdempotencyKey.length() > 100) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Idempotency-Key không hợp lệ.");
@@ -47,7 +71,7 @@ public class OrderService {
                 return ResponseEntity.ok(existingOrder);
             }
         }
-        if ("POS".equalsIgnoreCase(order.getChannel())) promotions.calculate(order, token, true);
+        if (order.getChannel() == SalesChannel.POS) promotions.calculate(order, token, true);
         if (order.getId() != null || order.getItems() == null || order.getItems().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đơn hàng phải có sản phẩm và không được có ID sẵn.");
         }
@@ -67,7 +91,7 @@ public class OrderService {
         if (discount.signum() < 0 || discount.compareTo(total) > 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Giảm giá không hợp lệ.");
         }
-        if ("POS".equalsIgnoreCase(order.getChannel())) {
+        if (order.getChannel() == SalesChannel.POS) {
             SalesBranch branch = SalesBranch.resolve(order.getBranchCode(), order.getBranchName());
             order.setBranchCode(branch.code());
             order.setBranchName(branch.name());
@@ -78,15 +102,15 @@ public class OrderService {
                 throw new ResponseStatusException(error.status() >= 400 && error.status() < 500 ? HttpStatus.CONFLICT : HttpStatus.SERVICE_UNAVAILABLE,
                         "Chưa thanh toán: chi nhánh không đủ tồn hoặc dịch vụ kho chưa sẵn sàng.");
             }
-            order.setChannel("POS");
-            if (!List.of("CASH", "VIETQR", "CARD").contains(order.getPaymentMethod())) {
+            order.setChannel(SalesChannel.POS);
+            if (!List.of(PaymentMethod.CASH, PaymentMethod.VIETQR, PaymentMethod.CARD).contains(order.getPaymentMethod())) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Phương thức thanh toán POS không hợp lệ.");
             }
             order.setTotalAmount(total);
             order.setDiscountAmount(discount);
             order.setTaxAmount(total.subtract(discount).multiply(new BigDecimal("0.08")).setScale(0, RoundingMode.HALF_UP));
             order.setFinalAmount(total.subtract(discount).add(order.getTaxAmount()));
-            order.setStatus("PAID");
+            order.setStatus(OrderStatus.PAID);
         }
         if (order.getCustomerName() == null || order.getCustomerName().isBlank()) order.setCustomerName("Khách vãng lai");
         if (order.getCustomerPhone() == null) order.setCustomerPhone("");
@@ -112,28 +136,35 @@ public class OrderService {
         order.setOrderCode("OPT-" + UUID.randomUUID().toString().toUpperCase());
         order.setCancelReason(null); order.setCancelledBy(null); order.setCancelledAt(null);
         order.setRefundStatus(null); order.setRefundConfirmedBy(null); order.setRefundConfirmedAt(null);
-        if ("POS".equals(order.getChannel()) && "CASH".equals(order.getPaymentMethod())
+        if ((order.getChannel() == SalesChannel.POS) && (order.getPaymentMethod() == PaymentMethod.CASH)
                 && (order.getCashReceived() == null || order.getCashReceived().compareTo(order.getFinalAmount()) < 0))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Tiền khách đưa chưa đủ theo tổng tiền backend.");
+        order.setIdempotencyKey(requestIdempotencyKey);
+        if (order.getChannel() == SalesChannel.POS) order.setStatus(OrderStatus.PENDING_PAYMENT);
         Order saved = orderRepository.save(order);
 
-        if ("POS".equals(saved.getChannel())) promotions.consume(saved);
+        if ((saved.getChannel() == SalesChannel.POS)) {
+            saved = orderStatusService.transition(saved, OrderStatus.PAID, saved.getStaffName(), "Thanh toán tại quầy");
+            promotions.consume(saved);
+        }
 
         // Record payment
         Payment payment = Payment.builder()
                 .orderId(saved.getId())
-                .paymentMethod(saved.getPaymentMethod() != null ? saved.getPaymentMethod() : "VIETQR")
+                .paymentMethod(saved.getPaymentMethod() != null ? saved.getPaymentMethod() : PaymentMethod.VIETQR)
                 .amount(saved.getFinalAmount() != null ? saved.getFinalAmount() : BigDecimal.ZERO)
                 .transactionCode("TXN-" + UUID.randomUUID().toString().toUpperCase())
                 .idempotencyKey(requestIdempotencyKey != null
                         ? requestIdempotencyKey
                         : UUID.randomUUID().toString())
-                .status("SUCCESS")
+                .status(PaymentStatus.SUCCESS)
                 .paidAt(LocalDateTime.now())
                 .build();
         paymentRepository.save(payment);
-        if ("POS".equalsIgnoreCase(saved.getChannel()) && "SUCCESS".equalsIgnoreCase(payment.getStatus())) {
+        if (saved.getChannel() == SalesChannel.POS && payment.getStatus() == PaymentStatus.SUCCESS) {
             stockDeductionService.enqueue(saved, payment);
+            warrantyActivationService.enqueueForPaidOrder(saved);
+            teamCheckoutService.dispatchLabJobIfNeeded(saved);
         }
 
         log.info("Tạo đơn hàng POS thành công: Mã {}", saved.getOrderCode());

@@ -5,6 +5,7 @@ import com.glassstore.lab.dto.CreateLabJobRequest;
 import com.glassstore.lab.dto.LabJobResponse;
 import com.glassstore.lab.dto.UpdateJobStatusRequest;
 import com.glassstore.lab.entity.LabJobStatus;
+import com.glassstore.lab.repository.LabJobStatusHistoryRepository;
 import com.glassstore.lab.exception.GlobalExceptionHandler;
 import com.glassstore.lab.service.LabJobService;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +39,9 @@ class LabJobControllerTest {
 
     @MockBean
     private LabJobService labJobService;
+
+    @MockBean
+    private LabJobStatusHistoryRepository historyRepository;
 
     @Test
     @DisplayName("GET /api/lab-jobs: Trả về 200 OK và danh sách LabJobResponse")
@@ -164,4 +168,3 @@ class LabJobControllerTest {
                 .andExpect(jsonPath("$.message").value("Ghi chú kiểm định QC (qcNotes) không được để trống khi kết quả là QC_FAILED"));
     }
 }
-

@@ -44,6 +44,7 @@ public class PromotionService {
         if (!code.isEmpty()) {
             voucher = (consumeLocks ? vouchers.lockByCode(code) : vouchers.findByCode(code)).orElseThrow(() -> invalid("Mã voucher không tồn tại."));
             LocalDateTime now = LocalDateTime.now();
+            if (voucher.getChannel() != null && !Set.of("ALL", "POS").contains(voucher.getChannel().toUpperCase(Locale.ROOT))) throw invalid("Voucher không áp dụng tại quầy POS.");
             if (!voucher.isActive() || voucher.getStartsAt() != null && now.isBefore(voucher.getStartsAt()) || voucher.getExpiresAt() != null && !now.isBefore(voucher.getExpiresAt())) throw invalid("Voucher chưa có hiệu lực hoặc đã hết hạn.");
             if (voucher.isMembersOnly() && order.getCustomerId() == null) throw invalid("Voucher chỉ dành cho thành viên.");
             if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) throw invalid("Voucher đã hết lượt sử dụng.");

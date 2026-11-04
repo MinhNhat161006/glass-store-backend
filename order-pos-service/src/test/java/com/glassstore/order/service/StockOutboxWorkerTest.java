@@ -1,4 +1,5 @@
 package com.glassstore.order.service;
+import com.glassstore.order.domain.*;
 
 import com.glassstore.order.client.CatalogInventoryClient;
 import com.glassstore.order.dto.CatalogStockDeductionResponse;
@@ -36,6 +37,7 @@ class StockOutboxWorkerTest {
     void successfulPaymentOutboxSendsOrderItemsAndMarksOrderSynced() {
         Order order = Order.builder()
                 .id(42L)
+                .status(OrderStatus.PAID)
                 .branchName("Chi nhánh 01 - Lê Thánh Tôn")
                 .items(List.of(OrderItem.builder().skuId("FRAME-001").quantity(2).build()))
                 .build();
@@ -43,7 +45,7 @@ class StockOutboxWorkerTest {
                 .orderId(42L)
                 .idempotencyKey("pos-request-42")
                 .transactionCode("TXN-42")
-                .status("SUCCESS")
+                .status(PaymentStatus.SUCCESS)
                 .build();
         StockDeductionOutbox outbox = StockDeductionOutbox.builder()
                 .id(7L)

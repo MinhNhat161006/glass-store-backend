@@ -1,4 +1,5 @@
 package com.glassstore.order.service;
+import com.glassstore.order.domain.*;
 import com.glassstore.order.client.CatalogInventoryClient;
 import com.glassstore.order.dto.CatalogStockDeductionRequest;
 import com.glassstore.order.entity.*;
@@ -24,7 +25,7 @@ public class StockOutboxWorker {
         StockDeductionOutbox row=outboxes.lockById(id).orElseThrow();
         if(!"PENDING".equals(row.getStatus()))return row.getStatus();
         boolean cancel="CANCEL".equals(row.getOperation());
-        if(!cancel && !"PAID".equals(order.getStatus())) {row.setStatus("FAILED");row.setLastError("Đơn không còn trạng thái đã thanh toán.");outboxes.save(row);return "FAILED";}
+        if(!cancel && !(order.getStatus() == OrderStatus.PAID)) {row.setStatus("FAILED");row.setLastError("Đơn không còn trạng thái đã thanh toán.");outboxes.save(row);return "FAILED";}
         Payment payment=payments.findByOrderId(order.getId()).stream().filter(p->row.getIdempotencyKey().equals(p.getIdempotencyKey())).findFirst().orElseThrow();
         CatalogStockDeductionRequest request=new CatalogStockDeductionRequest(order.getId(),row.getIdempotencyKey(),payment.getTransactionCode(),order.getBranchCode()!=null?order.getBranchCode():order.getBranchName(),order.getItems().stream().map(item->new CatalogStockDeductionRequest.Item(item.getSkuId(),item.getQuantity())).toList());
         row.setAttempts(row.getAttempts()+1);row.setLastAttemptAt(LocalDateTime.now());

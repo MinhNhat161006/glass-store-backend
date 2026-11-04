@@ -1,11 +1,17 @@
 server:
   port: 8084
 
+services:
+  order-pos-service:
+    url: ${ORDER_POS_SERVICE_URL:http://localhost:8083}
+  catalog-service:
+    url: ${CATALOG_SERVICE_URL:http://localhost:8082}
+
 spring:
   application:
     name: eyewear-lab-service
   datasource:
-    url: jdbc:mysql://localhost:3306/db_lab?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&characterEncoding=UTF-8
+    url: jdbc:mysql://localhost:3307/db_lab?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&characterEncoding=UTF-8
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver

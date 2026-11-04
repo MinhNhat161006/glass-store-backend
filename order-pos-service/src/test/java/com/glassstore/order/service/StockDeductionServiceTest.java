@@ -1,4 +1,6 @@
 package com.glassstore.order.service;
+import com.glassstore.order.domain.OrderStatus;
+import com.glassstore.order.domain.SalesChannel;
 
 import com.glassstore.order.client.CatalogInventoryClient;
 import com.glassstore.order.dto.CatalogStockDeductionResponse;
@@ -28,7 +30,7 @@ import static org.mockito.Mockito.*;
 class StockDeductionServiceTest {
     @Test
     void retrySyncedOrderDoesNotDeductAgainOrChangeBranch() {
-        Order order = Order.builder().id(90L).channel("POS").status("PAID").branchCode("BRANCH_01").build();
+        Order order = Order.builder().id(90L).channel(SalesChannel.POS).status(OrderStatus.PAID).branchCode("BRANCH_01").build();
         StockDeductionOutbox outbox = StockDeductionOutbox.builder().orderId(90L).status("SYNCED").build();
         when(orderRepository.lockById(90L)).thenReturn(Optional.of(order));
         when(outboxRepository.findByOrderId(90L)).thenReturn(Optional.of(outbox));
@@ -54,7 +56,7 @@ class StockDeductionServiceTest {
 
     @Mock private StockOutboxWorker worker;
     @Test void afterCommitDelegatesToTransactionalWorker() {
-        Order order=Order.builder().id(42L).status("PAID").build();
+        Order order=Order.builder().id(42L).status(OrderStatus.PAID).build();
         when(worker.process(7L)).thenReturn("SYNCED");
         stockDeductionService.processAfterCommit(new StockDeductionRequestedEvent(7L,order));
         assertEquals("SYNCED",order.getInventorySyncStatus());verify(worker).process(7L);
