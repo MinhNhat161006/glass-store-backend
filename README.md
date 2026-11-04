@@ -1,12 +1,12 @@
 # GlassStore Backend - Omnichannel Eyewear Retail Microservices
 
-Dự án Backend xây dựng trên nền tảng **Java 25 (LTS)**, **Spring Boot 3.5.16**, **Spring Cloud 2025.0.3**, **Spring Data JPA**, và **MySQL 8.0**, phục vụ toàn bộ nghiệp vụ chuỗi bán lẻ mắt kính đa kênh (Omnichannel) theo tiêu chuẩn SRS.
+Dự án Backend xây dựng trên nền tảng **Java 21 (LTS)**, **Spring Boot 3.5.16**, **Spring Cloud 2025.0.3**, **Spring Data JPA**, và **MySQL 8.0**, phục vụ toàn bộ nghiệp vụ chuỗi bán lẻ mắt kính đa kênh (Omnichannel) theo tiêu chuẩn SRS.
 
 ---
 
 ## 1. Công nghệ sử dụng (Tech Stack)
 
-- **Ngôn ngữ:** Java 25 (LTS)
+- **Ngôn ngữ:** Java 21 (LTS)
 - **Framework:** Spring Boot 3.5.16
 - **Kiến trúc phân tán:** Spring Cloud 2025.0.3
   - **API Gateway:** Spring Cloud Gateway (Port 8080 - Single Entry Point, Netty Reactive)
@@ -66,7 +66,7 @@ backend/
 
 ## 3. Yêu cầu môi trường (Prerequisites)
 
-- **Java JDK:** 25 trở lên (khuyến nghị OpenJDK 25 LTS hoặc Eclipse Temurin 25)
+- **Java JDK:** 21 (khuyến nghị OpenJDK 21 LTS hoặc Eclipse Temurin 21)
 - **Maven:** 3.9+ (hoặc dùng Maven wrapper tương thích với Maven 3.9+)
 - **Docker & Docker Compose:** Đã cài đặt Docker Desktop hoặc Docker Engine để chạy MySQL
 

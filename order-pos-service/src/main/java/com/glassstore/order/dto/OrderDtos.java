@@ -67,6 +67,10 @@ public final class OrderDtos {
 
         private String staffName;
 
+        /** Customer-entered measurements, kept with the order for staff review. */
+        @Valid
+        private PrescriptionInput prescription;
+
         private String branchName;
 
         private String branchCode;
@@ -82,6 +86,34 @@ public final class OrderDtos {
          * changed price is a hard failure.
          */
         private boolean acceptPriceChange;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class PrescriptionInput {
+        @NotNull @Digits(integer = 2, fraction = 2)
+        private BigDecimal odSph;
+        @NotNull @Digits(integer = 2, fraction = 2)
+        private BigDecimal odCyl;
+        @NotNull @Min(0) @Max(180)
+        private Integer odAxis;
+        @NotNull @DecimalMin("0") @Digits(integer = 2, fraction = 2)
+        private BigDecimal odAdd;
+        @NotNull @Digits(integer = 2, fraction = 2)
+        private BigDecimal osSph;
+        @NotNull @Digits(integer = 2, fraction = 2)
+        private BigDecimal osCyl;
+        @NotNull @Min(0) @Max(180)
+        private Integer osAxis;
+        @NotNull @DecimalMin("0") @Digits(integer = 2, fraction = 2)
+        private BigDecimal osAdd;
+        @NotNull @DecimalMin(value = "0", inclusive = false) @DecimalMax("100")
+        @Digits(integer = 3, fraction = 1)
+        private BigDecimal pd;
+        @AssertTrue(message = "Khách hàng cần xác nhận thông số toa kính đã cung cấp")
+        private boolean confirmed;
     }
 
     @Data

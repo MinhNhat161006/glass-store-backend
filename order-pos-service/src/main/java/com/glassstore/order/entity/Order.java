@@ -97,6 +97,9 @@ public class Order {
     @Column(name = "prescription_id")
     private Long prescriptionId;
 
+    @Embedded
+    private OrderPrescription prescription;
+
     @Column(name = "staff_name", length = 120)
     private String staffName;
 

@@ -13,7 +13,7 @@ Read this instead of re-reading the whole repository.
 | `order-pos-service` | 8083 | H2 `db_order` | Cart, checkout, POS, payment, voucher, order lifecycle. |
 | `eyewear-lab-service` | 8084 | H2 `db_lab` | Prescription, lab job, QC history, warranty. |
 
-- Java 25, Spring Boot 3.4.3, Spring Cloud 2024.0.0, JPA + Hibernate, Lombok.
+- Java 21, Spring Boot 3.4.3, Spring Cloud 2024.0.0, JPA + Hibernate, Lombok.
 - Persistence: `ddl-auto: update` on H2 in MySQL mode (no Flyway).
 - Response envelope: `ApiResponse<T>` = `{code, message, data, timestamp}`.
 - Portal `GET /api/orders` still returns a bare array.
