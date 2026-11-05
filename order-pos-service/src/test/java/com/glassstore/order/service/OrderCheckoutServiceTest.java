@@ -2,13 +2,10 @@ package com.glassstore.order.service;
 
 import com.glassstore.common.exception.ApiException;
 import com.glassstore.common.exception.ErrorCode;
-import com.glassstore.order.client.LabClient;
-import com.glassstore.order.client.LabServiceClient;
 import com.glassstore.order.domain.OrderStatus;
 import com.glassstore.order.domain.OrderType;
 import com.glassstore.order.domain.PaymentMethod;
 import com.glassstore.order.domain.PaymentStatus;
-import com.glassstore.order.dto.CreateLabJobRequest;
 import com.glassstore.order.dto.OrderDtos;
 import com.glassstore.order.entity.Order;
 import com.glassstore.order.entity.OrderItem;
@@ -18,7 +15,6 @@ import com.glassstore.order.repository.PaymentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -27,9 +23,8 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class OrderCheckoutServiceTest {
@@ -39,8 +34,7 @@ class OrderCheckoutServiceTest {
     private BasketPricingService pricingService;
     private OrderStatusService orderStatusService;
     private OrderInventoryService inventoryService;
-    private LabClient labClient;
-    private LabServiceClient labServiceClient;
+    private LabDispatchService labDispatch;
     private WarrantyActivationService warrantyActivationService;
     private OrderCheckoutService service;
 
@@ -51,11 +45,10 @@ class OrderCheckoutServiceTest {
         pricingService = mock(BasketPricingService.class);
         orderStatusService = mock(OrderStatusService.class);
         inventoryService = mock(OrderInventoryService.class);
-        labClient = mock(LabClient.class);
-        labServiceClient = mock(LabServiceClient.class);
+        labDispatch = mock(LabDispatchService.class);
         warrantyActivationService = mock(WarrantyActivationService.class);
         service = new OrderCheckoutService(orderRepository, paymentRepository, pricingService,
-                orderStatusService, inventoryService, labClient, warrantyActivationService, labServiceClient);
+                orderStatusService, inventoryService, labDispatch, warrantyActivationService);
 
         when(orderRepository.findByIdempotencyKey(any())).thenReturn(Optional.empty());
         when(orderRepository.findByOrderCode(any())).thenReturn(Optional.empty());
@@ -119,17 +112,15 @@ class OrderCheckoutServiceTest {
     }
 
     @Test
-    @DisplayName("dispatchLabJobIfNeeded: Tự động gửi CreateLabJobRequest qua LabServiceClient khi đơn có kính thuốc")
-    void dispatchLabJob_PrescriptionOrder_CallsFeignClient() {
+    @DisplayName("dispatchLabJobIfNeeded: Chuyển tiếp đơn hàng sang labDispatch.enqueue")
+    void dispatchLabJob_DelegatesToLabDispatch() {
         List<OrderItem> items = new ArrayList<>();
         items.add(OrderItem.builder().skuId("LNS-CRIZAL-160").productName("Tròng Crizal").quantity(1).build());
-        items.add(OrderItem.builder().skuId("FRM-RB-3025").productName("Gọng RayBan").quantity(1).build());
 
         Order order = Order.builder()
                 .id(101L)
                 .orderCode("ORD-20261104-001")
                 .customerName("Nguyễn Văn A")
-                .staffName("KTV Hưng")
                 .orderType(OrderType.COMPLETE_GLASSES)
                 .prescriptionId(55L)
                 .items(items)
@@ -137,60 +128,7 @@ class OrderCheckoutServiceTest {
 
         service.dispatchLabJobIfNeeded(order);
 
-        ArgumentCaptor<CreateLabJobRequest> captor = ArgumentCaptor.forClass(CreateLabJobRequest.class);
-        verify(labServiceClient).createLabJob(captor.capture());
-
-        CreateLabJobRequest captured = captor.getValue();
-        assertThat(captured.getOrderId()).isEqualTo(101L);
-        assertThat(captured.getOrderCode()).isEqualTo("ORD-20261104-001");
-        assertThat(captured.getTrayNumber()).isEqualTo("KHAY-ORD-20261104-001");
-        assertThat(captured.getCustomerName()).isEqualTo("Nguyễn Văn A");
-        assertThat(captured.getPrescriptionId()).isEqualTo(55L);
-        assertThat(captured.getLensSku()).isEqualTo("LNS-CRIZAL-160");
-        assertThat(captured.getFrameSku()).isEqualTo("FRM-RB-3025");
-        assertThat(captured.getTechnicianName()).isEqualTo("KTV Hưng");
-    }
-
-    @Test
-    @DisplayName("dispatchLabJobIfNeeded: Khi LabServiceClient gặp lỗi thì try-catch không ném lỗi ra ngoài")
-    void dispatchLabJob_WhenFeignClientFails_DoesNotThrow() {
-        List<OrderItem> items = new ArrayList<>();
-        items.add(OrderItem.builder().skuId("LNS-01").productName("Tròng lọc ánh sáng xanh").quantity(1).build());
-
-        Order order = Order.builder()
-                .id(102L)
-                .orderCode("ORD-20261104-002")
-                .customerName("Trần Thị B")
-                .orderType(OrderType.LENS_ONLY)
-                .prescriptionId(60L)
-                .items(items)
-                .build();
-
-        doThrow(new RuntimeException("Lab service connection timed out"))
-                .when(labServiceClient).createLabJob(any());
-
-        assertThatCode(() -> service.dispatchLabJobIfNeeded(order)).doesNotThrowAnyException();
-        verify(labServiceClient).createLabJob(any());
-    }
-
-    @Test
-    @DisplayName("dispatchLabJobIfNeeded: Đơn hàng không có kính thuốc/toa kính thì không gọi LabServiceClient")
-    void dispatchLabJob_NonPrescriptionOrder_DoesNotCallFeignClient() {
-        List<OrderItem> items = new ArrayList<>();
-        items.add(OrderItem.builder().skuId("ACC-CASE-01").productName("Hộp kính").quantity(1).build());
-
-        Order order = Order.builder()
-                .id(103L)
-                .orderCode("ORD-20261104-003")
-                .customerName("Lê Văn C")
-                .orderType(OrderType.ACCESSORY)
-                .prescriptionId(null)
-                .items(items)
-                .build();
-
-        service.dispatchLabJobIfNeeded(order);
-
-        verify(labServiceClient, never()).createLabJob(any());
+        verify(labDispatch, times(1)).enqueue(order);
     }
 
     private static OrderDtos.CheckoutRequest validRequest() {

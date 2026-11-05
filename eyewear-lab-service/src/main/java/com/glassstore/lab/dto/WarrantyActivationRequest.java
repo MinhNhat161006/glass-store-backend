@@ -7,6 +7,6 @@ import jakarta.validation.constraints.Pattern;
 public record WarrantyActivationRequest(
         @NotNull Long orderId,
         @NotNull Long orderItemId,
-        @NotBlank @Pattern(regexp = "FRAME_ADJUSTMENT|LENS_COATING") String benefitType
+        @NotBlank @Pattern(regexp = "FRAME_ADJUSTMENT|LENS_COATING|EXCHANGE_30_DAYS") String benefitType
 ) {
 }

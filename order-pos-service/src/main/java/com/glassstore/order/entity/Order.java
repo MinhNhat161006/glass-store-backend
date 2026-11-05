@@ -97,6 +97,9 @@ public class Order {
     @Column(name = "prescription_id")
     private Long prescriptionId;
 
+    @Embedded
+    private OrderPrescription prescription;
+
     @Column(name = "staff_name", length = 120)
     private String staffName;
 
@@ -119,6 +122,15 @@ public class Order {
     private String refundConfirmedBy;
     private LocalDateTime refundConfirmedAt;
 
+
+    @Column(name = "tracking_code", length = 80)
+    private String trackingCode;
+
+    @Column(name = "carrier_name", length = 60)
+    private String carrierName;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
 
     @Column(name = "notes", length = 1000)
     private String notes;
