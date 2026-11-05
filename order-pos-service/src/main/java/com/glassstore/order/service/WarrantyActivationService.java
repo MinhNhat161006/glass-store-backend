@@ -148,6 +148,7 @@ public class WarrantyActivationService {
         } else if (normalized.startsWith("LNS-") || normalized.startsWith("LZ-")) {
             benefits.add("LENS_COATING");
         }
+        if (!benefits.isEmpty()) benefits.add("EXCHANGE_30_DAYS");
         return benefits;
     }
 

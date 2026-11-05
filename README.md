@@ -1,17 +1,19 @@
 # GlassStore Backend - Omnichannel Eyewear Retail Microservices
 
-Dự án Backend xây dựng trên nền tảng **Java 25 (LTS)**, **Spring Boot 3.5.16**, **Spring Cloud 2025.0.3**, **Spring Data JPA**, và **MySQL 8.0**, phục vụ toàn bộ nghiệp vụ chuỗi bán lẻ mắt kính đa kênh (Omnichannel) theo tiêu chuẩn SRS.
+Dự án Backend xây dựng trên nền tảng **Java 21 (LTS)**, **Spring Boot 3.5.16**, **Spring Cloud 2025.0.3**, **Spring Data JPA**, và **MySQL 8.0**, phục vụ toàn bộ nghiệp vụ chuỗi bán lẻ mắt kính đa kênh (Omnichannel) theo tiêu chuẩn SRS.
 
 ---
 
 ## 1. Công nghệ sử dụng (Tech Stack)
 
-- **Ngôn ngữ:** Java 25 (LTS)
+- **Ngôn ngữ:** Java 21 (LTS)
 - **Framework:** Spring Boot 3.5.16
 - **Kiến trúc phân tán:** Spring Cloud 2025.0.3
   - **API Gateway:** Spring Cloud Gateway (Port 8080 - Single Entry Point, Netty Reactive)
   - **Inter-service Communication:** Spring Cloud OpenFeign (Declarative REST Client)
 - **Cơ sở dữ liệu:** MySQL 8.0 (Logical Database Isolation: 1 MySQL Server chứa 4 Schemas độc lập)
+
+Backend mặc định kết nối MySQL trên cổng `3306`. Nếu dùng MySQL Docker được publish ở `3307`, đặt biến môi trường `DB_PORT=3307` trước khi khởi động cả bốn service. Hai cổng có thể chứa hai bộ dữ liệu khác nhau; kiểm tra đúng server trước khi nhập dữ liệu hoặc chạy migration.
 - **ORM / Persistence:** Spring Data JPA & Hibernate
 - **Bảo mật & Xác thực:** Spring Security 6, JJWT (io.jsonwebtoken 0.11.5), BCrypt
 - **Email Service (Gửi OTP):** Spring Boot Starter Mail (Google SMTP)
@@ -66,7 +68,7 @@ backend/
 
 ## 3. Yêu cầu môi trường (Prerequisites)
 
-- **Java JDK:** 25 trở lên (khuyến nghị OpenJDK 25 LTS hoặc Eclipse Temurin 25)
+- **Java JDK:** 21 (khuyến nghị OpenJDK 21 LTS hoặc Eclipse Temurin 21)
 - **Maven:** 3.9+ (hoặc dùng Maven wrapper tương thích với Maven 3.9+)
 - **Docker & Docker Compose:** Đã cài đặt Docker Desktop hoặc Docker Engine để chạy MySQL
 

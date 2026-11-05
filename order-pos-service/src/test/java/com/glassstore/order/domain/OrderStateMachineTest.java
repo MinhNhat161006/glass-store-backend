@@ -70,6 +70,17 @@ class OrderStateMachineTest {
     }
 
     @Test
+    @DisplayName("OMS standard workflow: PAID -> PROCESSING (PREPARING) -> SHIPPING -> COMPLETED or CANCELLED")
+    void omsStandardWorkflow() {
+        assertThat(OrderStatus.PAID.canTransitionTo(OrderStatus.PREPARING)).isTrue();
+        assertThat(OrderStatus.PREPARING.canTransitionTo(OrderStatus.SHIPPING)).isTrue();
+        assertThat(OrderStatus.SHIPPING.canTransitionTo(OrderStatus.COMPLETED)).isTrue();
+        assertThat(OrderStatus.PAID.canTransitionTo(OrderStatus.CANCELLED)).isTrue();
+        assertThat(OrderStatus.PREPARING.canTransitionTo(OrderStatus.CANCELLED)).isTrue();
+        assertThat(OrderStatus.SHIPPING.canTransitionTo(OrderStatus.CANCELLED)).isTrue();
+    }
+
+    @Test
     @DisplayName("A paid order reports as paid-like so it must use the refund path (BR-18)")
     void paidLikeDetection() {
         assertThat(OrderStatus.PAID.isPaidLike()).isTrue();

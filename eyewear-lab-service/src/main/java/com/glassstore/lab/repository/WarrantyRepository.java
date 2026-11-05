@@ -26,6 +26,14 @@ public interface WarrantyRepository extends JpaRepository<Warranty, Long> {
 
     List<Warranty> findAllByOrderByCreatedAtDesc();
 
+    @Query("SELECT w FROM Warranty w WHERE " +
+           "LOWER(w.warrantyCode) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
+           "LOWER(w.customerPhone) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
+           "LOWER(w.originalOrderCode) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
+           "LOWER(w.customerName) LIKE LOWER(CONCAT('%', :q, '%')) " +
+           "ORDER BY w.createdAt DESC")
+    List<Warranty> search(@Param("q") String q);
+
     @Modifying
     @Query(value = """
             INSERT INTO warranties

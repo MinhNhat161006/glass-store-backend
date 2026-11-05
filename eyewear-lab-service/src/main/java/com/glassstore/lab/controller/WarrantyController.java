@@ -7,14 +7,18 @@ import com.glassstore.lab.repository.WarrantyRepository;
 import com.glassstore.lab.service.WarrantyService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/warranties")
 @RequiredArgsConstructor
+@Slf4j
 @CrossOrigin(origins = "*")
 public class WarrantyController {
 
@@ -27,17 +31,20 @@ public class WarrantyController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<WarrantyLookupItemDTO>> searchWarranties(
+    public ResponseEntity<?> searchWarranties(
             @RequestParam(name = "phone", required = false) String phone,
-            @RequestParam(name = "barcode", required = false) String barcode) {
-        boolean hasPhone = phone != null && !phone.isBlank();
-        boolean hasBarcode = barcode != null && !barcode.isBlank();
-        if (hasPhone == hasBarcode) {
-            return ResponseEntity.badRequest().build();
+            @RequestParam(name = "barcode", required = false) String barcode,
+            @RequestParam(name = "q", required = false) String q) {
+        if (phone != null && !phone.isBlank()) {
+            return ResponseEntity.ok(warrantyService.lookupByPhone(phone));
         }
-        return ResponseEntity.ok(hasPhone
-                ? warrantyService.lookupByPhone(phone)
-                : warrantyService.lookupByBarcode(barcode));
+        if (barcode != null && !barcode.isBlank()) {
+            return ResponseEntity.ok(warrantyService.lookupByBarcode(barcode));
+        }
+        if (q != null && !q.trim().isEmpty()) {
+            return ResponseEntity.ok(warrantyRepository.search(q.trim()));
+        }
+        return ResponseEntity.ok(warrantyRepository.findAllByOrderByCreatedAtDesc());
     }
 
     @GetMapping("/{id}")
@@ -55,7 +62,42 @@ public class WarrantyController {
     }
 
     @PostMapping
+    public ResponseEntity<Warranty> createWarranty(@RequestBody Warranty warranty) {
+        if (warranty.getWarrantyCode() == null || warranty.getWarrantyCode().isEmpty()) {
+            warranty.setWarrantyCode("#WAR-" + (System.currentTimeMillis() % 10000));
+        }
+        if (warranty.getStatus() == null || warranty.getStatus().isEmpty()) {
+            warranty.setStatus("WAITING_PROCESS");
+        }
+        if (warranty.getStatusLabel() == null || warranty.getStatusLabel().isEmpty()) {
+            warranty.setStatusLabel("Chờ tiếp nhận");
+        }
+        if (warranty.getStatusColor() == null || warranty.getStatusColor().isEmpty()) {
+            warranty.setStatusColor("#f59e0b");
+        }
+        warranty.setCreatedAt(LocalDateTime.now());
+        warranty.setUpdatedAt(LocalDateTime.now());
+        Warranty saved = warrantyRepository.save(warranty);
+        log.info("Tạo mới phiếu bảo hành thành công: {}", saved.getWarrantyCode());
+        return ResponseEntity.ok(saved);
+    }
+
+    @PostMapping("/activate")
     public ResponseEntity<Warranty> activateWarranty(@Valid @RequestBody WarrantyActivationRequest request) {
         return ResponseEntity.ok(warrantyService.activate(request));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Warranty> updateStatus(
+            @PathVariable("id") Long id,
+            @RequestBody Map<String, String> body) {
+        return warrantyRepository.findById(id).map(w -> {
+            if (body.containsKey("status")) w.setStatus(body.get("status"));
+            if (body.containsKey("statusLabel")) w.setStatusLabel(body.get("statusLabel"));
+            if (body.containsKey("statusColor")) w.setStatusColor(body.get("statusColor"));
+            if (body.containsKey("techNote")) w.setTechNote(body.get("techNote"));
+            w.setUpdatedAt(LocalDateTime.now());
+            return ResponseEntity.ok(warrantyRepository.save(w));
+        }).orElse(ResponseEntity.notFound().build());
     }
 }

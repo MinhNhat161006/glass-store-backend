@@ -20,12 +20,13 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByIdempotencyKey(String idempotencyKey);
 
     List<Order> findAllByOrderByCreatedAtDesc();
-
     List<Order> findByCustomerIdOrderByCreatedAtDesc(Long customerId);
 
     List<Order> findByStatusOrderByCreatedAtDesc(OrderStatus status);
 
     List<Order> findByChannelOrderByCreatedAtDesc(SalesChannel channel);
+
+    List<Order> findByStatusAndChannelOrderByCreatedAtDesc(OrderStatus status, SalesChannel channel);
 
     List<Order> findByPosSessionIdOrderByCreatedAtDesc(Long posSessionId);
 

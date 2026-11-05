@@ -11,7 +11,7 @@ spring:
   application:
     name: eyewear-lab-service
   datasource:
-    url: jdbc:mysql://localhost:3307/db_lab?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&characterEncoding=UTF-8
+    url: jdbc:mysql://localhost:${DB_PORT:3306}/db_lab?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&characterEncoding=UTF-8
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver

@@ -20,6 +20,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.http.HttpMethod;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -34,7 +35,8 @@ public class InventorySecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/api/inventory", "/api/inventory/**").hasAnyRole("ADMIN", "LAB")
+                        .requestMatchers(HttpMethod.GET, "/api/inventory", "/api/inventory/locations").hasAnyRole("ADMIN", "LAB", "LAB_TECH", "SALES_STAFF")
+                        .requestMatchers("/api/inventory", "/api/inventory/**").hasAnyRole("ADMIN", "LAB", "LAB_TECH")
                         .anyRequest().permitAll())
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
