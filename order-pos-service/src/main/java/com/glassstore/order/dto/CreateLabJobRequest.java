@@ -16,10 +16,15 @@ import java.math.BigDecimal;
 public class CreateLabJobRequest {
 
     private Long orderId;
+    private Long orderItemId;
+    private Long prescriptionId;
+    private String sku;
+    private String idempotencyKey;
+
     private String orderCode;
     private String trayNumber;
+    private Long customerId;
     private String customerName;
-    private Long prescriptionId;
 
     private String lensSku;
     private String lensName;
@@ -53,6 +58,7 @@ public class CreateLabJobRequest {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class PrescriptionDto {
         private Long id;
+        private Long customerId;
         private BigDecimal odSphere;
         private BigDecimal odCyl;
         private Integer odAxis;

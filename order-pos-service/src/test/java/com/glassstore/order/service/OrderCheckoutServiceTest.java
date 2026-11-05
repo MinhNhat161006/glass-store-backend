@@ -23,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -121,6 +122,19 @@ class OrderCheckoutServiceTest {
     @Test
     @DisplayName("dispatchLabJobIfNeeded: Tự động gửi CreateLabJobRequest qua LabServiceClient khi đơn có kính thuốc")
     void dispatchLabJob_PrescriptionOrder_CallsFeignClient() {
+        Map<String, Object> rxData = Map.of(
+                "id", 55L,
+                "customerId", 10L,
+                "odSph", -2.00,
+                "osSph", -2.00,
+                "odCyl", -0.50,
+                "osCyl", -0.50,
+                "odAxis", 90,
+                "osAxis", 90,
+                "pd", 63.0
+        );
+        when(labServiceClient.getPrescriptionById(55L)).thenReturn(org.springframework.http.ResponseEntity.ok(Map.of("data", rxData)));
+
         List<OrderItem> items = new ArrayList<>();
         items.add(OrderItem.builder().skuId("LNS-CRIZAL-160").productName("Tròng Crizal").quantity(1).build());
         items.add(OrderItem.builder().skuId("FRM-RB-3025").productName("Gọng RayBan").quantity(1).build());
@@ -128,8 +142,10 @@ class OrderCheckoutServiceTest {
         Order order = Order.builder()
                 .id(101L)
                 .orderCode("ORD-20261104-001")
+                .customerId(10L)
                 .customerName("Nguyễn Văn A")
                 .staffName("KTV Hưng")
+                .status(OrderStatus.PAID)
                 .orderType(OrderType.COMPLETE_GLASSES)
                 .prescriptionId(55L)
                 .items(items)
@@ -154,13 +170,28 @@ class OrderCheckoutServiceTest {
     @Test
     @DisplayName("dispatchLabJobIfNeeded: Khi LabServiceClient gặp lỗi thì try-catch không ném lỗi ra ngoài")
     void dispatchLabJob_WhenFeignClientFails_DoesNotThrow() {
+        Map<String, Object> rxData = Map.of(
+                "id", 60L,
+                "customerId", 20L,
+                "odSph", -1.50,
+                "osSph", -1.50,
+                "odCyl", 0.0,
+                "osCyl", 0.0,
+                "odAxis", 0,
+                "osAxis", 0,
+                "pd", 62.0
+        );
+        when(labServiceClient.getPrescriptionById(60L)).thenReturn(org.springframework.http.ResponseEntity.ok(Map.of("data", rxData)));
+
         List<OrderItem> items = new ArrayList<>();
         items.add(OrderItem.builder().skuId("LNS-01").productName("Tròng lọc ánh sáng xanh").quantity(1).build());
 
         Order order = Order.builder()
                 .id(102L)
                 .orderCode("ORD-20261104-002")
+                .customerId(20L)
                 .customerName("Trần Thị B")
+                .status(OrderStatus.PAID)
                 .orderType(OrderType.LENS_ONLY)
                 .prescriptionId(60L)
                 .items(items)
@@ -170,7 +201,7 @@ class OrderCheckoutServiceTest {
                 .when(labServiceClient).createLabJob(any());
 
         assertThatCode(() -> service.dispatchLabJobIfNeeded(order)).doesNotThrowAnyException();
-        verify(labServiceClient).createLabJob(any());
+        verify(labServiceClient, atLeastOnce()).createLabJob(any());
     }
 
     @Test

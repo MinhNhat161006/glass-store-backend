@@ -6,7 +6,10 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "lab_jobs")
+@Table(name = "lab_jobs", indexes = {
+        @Index(name = "idx_lab_jobs_order", columnList = "order_id"),
+        @Index(name = "idx_lab_jobs_idempotency", columnList = "idempotency_key", unique = true)
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -18,8 +21,14 @@ public class LabJob {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "idempotency_key", unique = true, nullable = false, length = 100)
+    private String idempotencyKey;
+
     @Column(name = "order_id", nullable = false)
     private Long orderId;
+
+    @Column(name = "order_item_id")
+    private Long orderItemId;
 
     @Column(name = "order_code", length = 60)
     private String orderCode;
@@ -32,6 +41,9 @@ public class LabJob {
 
     @Column(name = "customer_name")
     private String customerName;
+
+    @Column(name = "sku", length = 100)
+    private String sku;
 
     @Column(name = "lens_sku", length = 100)
     private String lensSku;
@@ -48,7 +60,7 @@ public class LabJob {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50, nullable = false)
     @Builder.Default
-    private LabJobStatus status = LabJobStatus.PENDING;
+    private LabJobStatus status = LabJobStatus.CREATED;
 
     @Column(name = "technician_id")
     private Long technicianId;
@@ -85,7 +97,11 @@ public class LabJob {
             this.updatedAt = LocalDateTime.now();
         }
         if (this.status == null) {
-            this.status = LabJobStatus.PENDING;
+            this.status = LabJobStatus.CREATED;
+        }
+        if (this.idempotencyKey == null || this.idempotencyKey.isBlank()) {
+            this.idempotencyKey = "LAB_REQ_" + (this.orderId != null ? this.orderId : "0")
+                    + "_" + (this.orderItemId != null ? this.orderItemId : "0");
         }
     }
 

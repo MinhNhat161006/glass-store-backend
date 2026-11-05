@@ -18,13 +18,21 @@ public class CreateLabJobRequest {
     @NotNull(message = "Mã đơn hàng (orderId) không được để trống")
     private Long orderId;
 
+    private Long orderItemId;
+
+    private Long prescriptionId;
+
+    private String sku;
+
+    private String idempotencyKey;
+
     private String orderCode;
 
     private String trayNumber;
 
-    private String customerName;
+    private Long customerId;
 
-    private Long prescriptionId;
+    private String customerName;
 
     private String lensSku;
     private String lensName;
@@ -36,7 +44,7 @@ public class CreateLabJobRequest {
     private String technicianName;
     private String technicianNotes;
 
-    // Chi tiết thông số đơn thuốc/khúc xạ (dạng lồng hoặc phẳng)
+    // Chi tiết thông số đơn thuốc/khúc xạ
     private PrescriptionDto prescription;
 
     // Các trường phẳng tương thích
@@ -85,6 +93,13 @@ public class CreateLabJobRequest {
 
         private BigDecimal pd;
         private String notes;
+    }
+
+    public String getEffectiveIdempotencyKey() {
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            return idempotencyKey.trim();
+        }
+        return "LAB_REQ_" + (orderId != null ? orderId : "0") + "_" + (orderItemId != null ? orderItemId : "0");
     }
 
     public BigDecimal getEffectiveOdSphere() {
