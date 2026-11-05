@@ -127,6 +127,10 @@ public final class OrderDtos {
         private String reason;
 
         private String actor;
+
+        private String trackingCode;
+
+        private String carrierName;
     }
 
     @Data

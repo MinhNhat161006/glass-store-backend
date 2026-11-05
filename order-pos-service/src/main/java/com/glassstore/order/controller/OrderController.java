@@ -194,10 +194,32 @@ public class OrderController {
             throw com.glassstore.common.exception.ApiException.of(
                     com.glassstore.common.exception.ErrorCode.VALIDATION_ERROR, ex.getMessage());
         }
-        if (order.getBranchCode() != null && (target == OrderStatus.CANCELLED
+        if (order.getChannel() == SalesChannel.POS && "POS".equalsIgnoreCase(body.getActor()) && (target == OrderStatus.CANCELLED
                 || target == OrderStatus.CANCEL_PENDING || target == OrderStatus.REFUND_PENDING
                 || target == OrderStatus.REFUNDED || target == OrderStatus.CANCEL_REQUESTED)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Hãy dùng API hủy đơn tại quầy để hoàn kho và quyền lợi.");
+        }
+        if (body.getTrackingCode() != null && !body.getTrackingCode().isBlank()) {
+            order.setTrackingCode(body.getTrackingCode().trim());
+        }
+        if (body.getCarrierName() != null && !body.getCarrierName().isBlank()) {
+            order.setCarrierName(body.getCarrierName().trim());
+        }
+        if (target == OrderStatus.COMPLETED) {
+            order.setCompletedAt(java.time.LocalDateTime.now());
+            List<Payment> orderPayments = paymentRepository.findByOrderId(order.getId());
+            for (Payment p : orderPayments) {
+                if (p.getStatus() == com.glassstore.order.domain.PaymentStatus.PENDING) {
+                    p.setStatus(com.glassstore.order.domain.PaymentStatus.SUCCESS);
+                    p.setPaidAt(java.time.LocalDateTime.now());
+                    paymentRepository.save(p);
+                }
+            }
+        }
+        if (target == OrderStatus.CANCELLED) {
+            order.setCancelReason(body.getReason() != null ? body.getReason().trim() : "Hủy từ quản lý chuỗi OMS");
+            order.setCancelledBy(body.getActor() != null ? body.getActor().trim() : "OMS");
+            order.setCancelledAt(java.time.LocalDateTime.now());
         }
         Order updated = orderStatusService.transition(order, target, body.getActor(), body.getReason());
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái đơn hàng thành công", updated));

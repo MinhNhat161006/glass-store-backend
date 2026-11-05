@@ -36,6 +36,9 @@ public class OrderStatusService {
         OrderStateMachine.requireTransition(current, target);
 
         order.setStatus(target);
+        if (target == OrderStatus.COMPLETED && order.getCompletedAt() == null) {
+            order.setCompletedAt(java.time.LocalDateTime.now());
+        }
         order.setUpdatedAt(java.time.LocalDateTime.now());
         Order saved = orderRepository.save(order);
 
