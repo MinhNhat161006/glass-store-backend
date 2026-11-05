@@ -3,6 +3,7 @@ package com.glassstore.order.service;
 import com.glassstore.common.exception.ApiException;
 import com.glassstore.common.exception.ErrorCode;
 import com.glassstore.order.domain.*;
+import com.glassstore.order.dto.CreateLabJobRequest;
 import com.glassstore.order.dto.OrderDtos;
 import com.glassstore.order.entity.Order;
 import com.glassstore.order.entity.OrderItem;
@@ -10,8 +11,8 @@ import com.glassstore.order.entity.OrderPrescription;
 import com.glassstore.order.entity.Payment;
 import com.glassstore.order.repository.OrderRepository;
 import com.glassstore.order.repository.PaymentRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +31,6 @@ import java.util.concurrent.ThreadLocalRandom;
  * Prices and totals are recomputed server-side (BR-05, BR-16).</p>
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class OrderCheckoutService {
 
@@ -43,6 +43,39 @@ public class OrderCheckoutService {
     private final OrderInventoryService inventoryService;
     private final LabDispatchService labDispatch;
     private final WarrantyActivationService warrantyActivationService;
+    private final LabServiceClient labServiceClient;
+
+    @Autowired
+    public OrderCheckoutService(
+            OrderRepository orderRepository,
+            PaymentRepository paymentRepository,
+            BasketPricingService pricingService,
+            OrderStatusService orderStatusService,
+            OrderInventoryService inventoryService,
+            @Autowired(required = false) LabClient labClient,
+            WarrantyActivationService warrantyActivationService,
+            @Autowired(required = false) LabServiceClient labServiceClient) {
+        this.orderRepository = orderRepository;
+        this.paymentRepository = paymentRepository;
+        this.pricingService = pricingService;
+        this.orderStatusService = orderStatusService;
+        this.inventoryService = inventoryService;
+        this.labClient = labClient;
+        this.warrantyActivationService = warrantyActivationService;
+        this.labServiceClient = labServiceClient;
+    }
+
+    public OrderCheckoutService(
+            OrderRepository orderRepository,
+            PaymentRepository paymentRepository,
+            BasketPricingService pricingService,
+            OrderStatusService orderStatusService,
+            OrderInventoryService inventoryService,
+            LabClient labClient,
+            WarrantyActivationService warrantyActivationService) {
+        this(orderRepository, paymentRepository, pricingService, orderStatusService,
+                inventoryService, labClient, warrantyActivationService, null);
+    }
 
     @Transactional
     public CheckoutOutcome checkout(OrderDtos.CheckoutRequest request, String idempotencyKey) {
@@ -210,6 +243,9 @@ public class OrderCheckoutService {
         return paid;
     }
 
+    /**
+     * Tự động sinh lệnh mài Lens (lab_job) qua OpenFeign khi đơn hàng có kính thuốc / toa đo mắt.
+     */
     public void dispatchLabJobIfNeeded(Order order) {
         labDispatch.enqueue(order);
     }

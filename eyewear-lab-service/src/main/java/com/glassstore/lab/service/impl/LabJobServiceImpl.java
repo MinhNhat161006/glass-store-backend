@@ -73,17 +73,86 @@ public class LabJobServiceImpl implements LabJobService {
     @Override
     @Transactional
     public LabJobResponse createLabJob(CreateLabJobRequest request) {
-        return createFromOrder(
-                request.getOrderId(),
-                request.getPrescriptionId(),
-                request.getFrameSku(),
-                request.getFrameName(),
-                request.getLensSku(),
-                request.getLensName(),
-                request.getTechnicianName(),
-                request.getTechnicianId(),
-                request.getTechnicianNotes(),
-                request.getCustomerName());
+        if (request.getOrderId() == null) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Thiếu mã đơn hàng để tạo lệnh gia công");
+        }
+
+        var existing = labJobRepository.findByOrderId(request.getOrderId());
+        if (existing.isPresent()) {
+            return getResponse(existing.get());
+        }
+
+        Long prescriptionId = request.getEffectivePrescriptionId();
+        Prescription prescription = null;
+        if (prescriptionId != null) {
+            prescription = prescriptionRepository.findById(prescriptionId).orElse(null);
+        }
+
+        // Tự động tạo và lưu toa kính nếu chưa có nhưng request truyền các thông số khúc xạ
+        if (prescription == null && (request.getEffectiveOdSphere() != null || request.getEffectiveOsSphere() != null || request.getEffectivePd() != null)) {
+            prescription = Prescription.builder()
+                    .customerId(1L)
+                    .customerName(request.getCustomerName() != null ? request.getCustomerName() : "Khách hàng POS")
+                    .optometristId(1L)
+                    .optometristName("Hệ thống POS")
+                    .odSph(request.getEffectiveOdSphere() != null ? request.getEffectiveOdSphere() : BigDecimal.ZERO)
+                    .odCyl(request.getEffectiveOdCyl() != null ? request.getEffectiveOdCyl() : BigDecimal.ZERO)
+                    .odAxis(request.getEffectiveOdAxis() != null ? request.getEffectiveOdAxis() : 0)
+                    .odAdd(request.getEffectiveOdAdd() != null ? request.getEffectiveOdAdd() : BigDecimal.ZERO)
+                    .osSph(request.getEffectiveOsSphere() != null ? request.getEffectiveOsSphere() : BigDecimal.ZERO)
+                    .osCyl(request.getEffectiveOsCyl() != null ? request.getEffectiveOsCyl() : BigDecimal.ZERO)
+                    .osAxis(request.getEffectiveOsAxis() != null ? request.getEffectiveOsAxis() : 0)
+                    .osAdd(request.getEffectiveOsAdd() != null ? request.getEffectiveOsAdd() : BigDecimal.ZERO)
+                    .pd(request.getEffectivePd() != null ? request.getEffectivePd() : new BigDecimal("63.0"))
+                    .notes(request.getPrescription() != null ? request.getPrescription().getNotes() : null)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            prescription = prescriptionRepository.save(prescription);
+            prescriptionId = prescription.getId();
+        }
+
+        if (prescription != null) {
+            requireCompletePrescription(prescription);
+        }
+
+        String resolvedCustomerName = request.getCustomerName() == null || request.getCustomerName().isBlank()
+                ? (prescription != null ? prescription.getCustomerName() : "Khách hàng")
+                : request.getCustomerName();
+
+        LabJob job = LabJob.builder()
+                .orderId(request.getOrderId())
+                .orderCode(request.getOrderCode())
+                .trayNumber(request.getEffectiveTrayNumber())
+                .prescriptionId(prescription != null ? prescription.getId() : prescriptionId)
+                .customerName(resolvedCustomerName)
+                .frameSku(request.getFrameSku())
+                .frameName(request.getFrameName())
+                .lensSku(request.getLensSku())
+                .lensName(request.getLensName())
+                .technicianId(request.getTechnicianId())
+                .technicianName(request.getTechnicianName())
+                .technicianNotes(request.getTechnicianNotes())
+                .status(com.glassstore.lab.entity.LabJobStatus.PENDING)
+                .build();
+
+        LabJob saved = labJobRepository.save(job);
+        recordStatus(saved, null, saved.getStatus().name(), request.getTechnicianName(), "Tạo lệnh gia công từ đơn hàng");
+        log.info("Created lab job {} for order {} (code: {}, tray: {})",
+                saved.getId(), saved.getOrderId(), saved.getOrderCode(), saved.getTrayNumber());
+
+        LabJobResponse response = LabJobResponse.from(saved, prescription);
+        if (prescription == null && response != null) {
+            if (request.getEffectiveOdSphere() != null) response.setOdSphere(request.getEffectiveOdSphere());
+            if (request.getEffectiveOdCyl() != null) response.setOdCyl(request.getEffectiveOdCyl());
+            if (request.getEffectiveOdAxis() != null) response.setOdAxis(request.getEffectiveOdAxis());
+            if (request.getEffectiveOdAdd() != null) response.setOdAdd(request.getEffectiveOdAdd());
+            if (request.getEffectiveOsSphere() != null) response.setOsSphere(request.getEffectiveOsSphere());
+            if (request.getEffectiveOsCyl() != null) response.setOsCyl(request.getEffectiveOsCyl());
+            if (request.getEffectiveOsAxis() != null) response.setOsAxis(request.getEffectiveOsAxis());
+            if (request.getEffectiveOsAdd() != null) response.setOsAdd(request.getEffectiveOsAdd());
+            if (request.getEffectivePd() != null) response.setPd(request.getEffectivePd());
+        }
+        return response;
     }
 
     @Override
@@ -135,6 +204,8 @@ public class LabJobServiceImpl implements LabJobService {
                 : customerName;
         LabJob job = LabJob.builder()
                 .orderId(orderId)
+                .orderCode(null)
+                .trayNumber("KHAY-" + orderId)
                 .prescriptionId(prescriptionId)
                 .customerName(resolvedCustomerName)
                 .frameSku(frameSku)

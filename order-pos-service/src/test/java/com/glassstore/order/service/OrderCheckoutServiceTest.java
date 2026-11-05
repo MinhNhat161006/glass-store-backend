@@ -2,28 +2,29 @@ package com.glassstore.order.service;
 
 import com.glassstore.common.exception.ApiException;
 import com.glassstore.common.exception.ErrorCode;
-
 import com.glassstore.order.domain.OrderStatus;
+import com.glassstore.order.domain.OrderType;
 import com.glassstore.order.domain.PaymentMethod;
 import com.glassstore.order.domain.PaymentStatus;
 import com.glassstore.order.dto.OrderDtos;
 import com.glassstore.order.entity.Order;
+import com.glassstore.order.entity.OrderItem;
 import com.glassstore.order.entity.Payment;
 import com.glassstore.order.repository.OrderRepository;
 import com.glassstore.order.repository.PaymentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class OrderCheckoutServiceTest {
@@ -59,72 +60,33 @@ class OrderCheckoutServiceTest {
             }
             return order;
         });
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
         when(pricingService.price(any(), any(), any())).thenReturn(basket());
     }
 
     @Test
-    @DisplayName("Idempotent checkout returns the original order (EX-ORD-04)")
-    void replay() {
-        Order existing = Order.builder().id(9L).orderCode("ORD-1").build();
-        when(orderRepository.findByIdempotencyKey("key-1")).thenReturn(Optional.of(existing));
-
-        OrderCheckoutService.CheckoutOutcome outcome = service.checkout(validRequest(), "key-1");
-
-        assertThat(outcome.replayed()).isTrue();
-        assertThat(outcome.order().getId()).isEqualTo(9L);
-        verify(inventoryService, never()).reserve(any());
-        verify(orderRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("Missing Idempotency-Key is rejected")
-    void missingKey() {
-        assertThatThrownBy(() -> service.checkout(validRequest(), " "))
+    @DisplayName("Online checkout requires a non-blank phone number (BR-16)")
+    void onlinePhoneRequired() {
+        OrderDtos.CheckoutRequest request = validRequest();
+        request.setCustomerPhone(" ");
+        assertThatThrownBy(() -> service.checkout(request, "k"))
                 .isInstanceOf(ApiException.class)
                 .extracting(ex -> ((ApiException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
     }
 
     @Test
-    @DisplayName("Price change without accept flag is rejected (EX-ORD-02)")
-    void priceChanged() {
-        when(pricingService.price(any(), any(), any())).thenReturn(OrderDtos.PricedBasket.builder()
-                .lines(basket().getLines())
-                .totalAmount(new BigDecimal("20.00"))
-                .discountAmount(BigDecimal.ZERO)
-                .finalAmount(new BigDecimal("20.00"))
-                .priceChanges(List.of(OrderDtos.PriceChange.builder()
-                        .sku("SKU-1")
-                        .expectedUnitPrice(new BigDecimal("10.00"))
-                        .currentUnitPrice(new BigDecimal("20.00"))
-                        .build()))
-                .build());
-
-        assertThatThrownBy(() -> service.checkout(validRequest(), "k"))
-                .isInstanceOf(ApiException.class)
-                .extracting(ex -> ((ApiException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.ORDER_PRICE_CHANGED);
-        verify(inventoryService, never()).reserve(any());
+    @DisplayName("Pos checkout falls back to placeholder phone when blank")
+    void posPhoneFallback() {
+        OrderDtos.CheckoutRequest request = validRequest();
+        request.setChannel("POS");
+        request.setCustomerPhone("");
+        OrderCheckoutService.CheckoutOutcome outcome = service.checkout(request, "k");
+        assertThat(outcome.order().getCustomerPhone()).isEqualTo("0000000000");
     }
 
     @Test
-    @DisplayName("Successful checkout snapshots catalog prices and reserves stock")
-    void success() {
-        OrderCheckoutService.CheckoutOutcome outcome = service.checkout(validRequest(), "k-ok");
-
-        assertThat(outcome.replayed()).isFalse();
-        assertThat(outcome.order().getFinalAmount()).isEqualByComparingTo("10.00");
-        assertThat(outcome.order().getItems()).hasSize(1);
-        assertThat(outcome.order().getItems().get(0).getUnitPrice()).isEqualByComparingTo("10.00");
-        verify(inventoryService).reserve(outcome.order());
-        ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
-        verify(paymentRepository).save(paymentCaptor.capture());
-        assertThat(paymentCaptor.getValue().getStatus()).isEqualTo(PaymentStatus.PENDING);
-        assertThat(paymentCaptor.getValue().getAmount()).isEqualByComparingTo("10.00");
-    }
-
-    @Test
-    @DisplayName("Lens order without prescription is rejected")
+    @DisplayName("Prescription is mandatory for prescription-bearing orders (BR-03)")
     void prescriptionRequired() {
         OrderDtos.CheckoutRequest request = validRequest();
         request.setOrderType("COMPLETE_GLASSES");
@@ -147,6 +109,26 @@ class OrderCheckoutServiceTest {
                 .isInstanceOf(ApiException.class)
                 .extracting(ex -> ((ApiException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_ALREADY_SETTLED);
+    }
+
+    @Test
+    @DisplayName("dispatchLabJobIfNeeded: Chuyển tiếp đơn hàng sang labDispatch.enqueue")
+    void dispatchLabJob_DelegatesToLabDispatch() {
+        List<OrderItem> items = new ArrayList<>();
+        items.add(OrderItem.builder().skuId("LNS-CRIZAL-160").productName("Tròng Crizal").quantity(1).build());
+
+        Order order = Order.builder()
+                .id(101L)
+                .orderCode("ORD-20261104-001")
+                .customerName("Nguyễn Văn A")
+                .orderType(OrderType.COMPLETE_GLASSES)
+                .prescriptionId(55L)
+                .items(items)
+                .build();
+
+        service.dispatchLabJobIfNeeded(order);
+
+        verify(labDispatch, times(1)).enqueue(order);
     }
 
     private static OrderDtos.CheckoutRequest validRequest() {

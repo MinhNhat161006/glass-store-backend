@@ -21,6 +21,8 @@ public class LabJobResponse {
 
     private Long id;
     private Long orderId;
+    private String orderCode;
+    private String trayNumber;
     private Long prescriptionId;
     private String customerName;
     private String lensSku;
@@ -70,6 +72,8 @@ public class LabJobResponse {
         LabJobResponseBuilder builder = LabJobResponse.builder()
                 .id(job.getId())
                 .orderId(job.getOrderId())
+                .orderCode(job.getOrderCode())
+                .trayNumber(job.getTrayNumber())
                 .prescriptionId(job.getPrescriptionId())
                 .customerName(job.getCustomerName())
                 .lensSku(job.getLensSku())
@@ -107,4 +111,3 @@ public class LabJobResponse {
         return builder.build();
     }
 }
-
