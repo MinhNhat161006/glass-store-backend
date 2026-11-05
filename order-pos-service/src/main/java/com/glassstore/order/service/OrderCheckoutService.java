@@ -3,15 +3,17 @@ package com.glassstore.order.service;
 import com.glassstore.common.exception.ApiException;
 import com.glassstore.common.exception.ErrorCode;
 import com.glassstore.order.client.LabClient;
+import com.glassstore.order.client.LabServiceClient;
 import com.glassstore.order.domain.*;
+import com.glassstore.order.dto.CreateLabJobRequest;
 import com.glassstore.order.dto.OrderDtos;
 import com.glassstore.order.entity.Order;
 import com.glassstore.order.entity.OrderItem;
 import com.glassstore.order.entity.Payment;
 import com.glassstore.order.repository.OrderRepository;
 import com.glassstore.order.repository.PaymentRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +32,6 @@ import java.util.concurrent.ThreadLocalRandom;
  * Prices and totals are recomputed server-side (BR-05, BR-16).</p>
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class OrderCheckoutService {
 
@@ -43,6 +44,39 @@ public class OrderCheckoutService {
     private final OrderInventoryService inventoryService;
     private final LabClient labClient;
     private final WarrantyActivationService warrantyActivationService;
+    private final LabServiceClient labServiceClient;
+
+    @Autowired
+    public OrderCheckoutService(
+            OrderRepository orderRepository,
+            PaymentRepository paymentRepository,
+            BasketPricingService pricingService,
+            OrderStatusService orderStatusService,
+            OrderInventoryService inventoryService,
+            @Autowired(required = false) LabClient labClient,
+            WarrantyActivationService warrantyActivationService,
+            @Autowired(required = false) LabServiceClient labServiceClient) {
+        this.orderRepository = orderRepository;
+        this.paymentRepository = paymentRepository;
+        this.pricingService = pricingService;
+        this.orderStatusService = orderStatusService;
+        this.inventoryService = inventoryService;
+        this.labClient = labClient;
+        this.warrantyActivationService = warrantyActivationService;
+        this.labServiceClient = labServiceClient;
+    }
+
+    public OrderCheckoutService(
+            OrderRepository orderRepository,
+            PaymentRepository paymentRepository,
+            BasketPricingService pricingService,
+            OrderStatusService orderStatusService,
+            OrderInventoryService inventoryService,
+            LabClient labClient,
+            WarrantyActivationService warrantyActivationService) {
+        this(orderRepository, paymentRepository, pricingService, orderStatusService,
+                inventoryService, labClient, warrantyActivationService, null);
+    }
 
     @Transactional
     public CheckoutOutcome checkout(OrderDtos.CheckoutRequest request, String idempotencyKey) {
@@ -196,38 +230,154 @@ public class OrderCheckoutService {
         return paid;
     }
 
+    /**
+     * Tự động sinh lệnh mài Lens (lab_job) qua OpenFeign khi đơn hàng có kính thuốc / toa đo mắt.
+     */
     public void dispatchLabJobIfNeeded(Order order) {
-        if (order.getPrescriptionId() == null || order.getOrderType() == null
-                || !order.getOrderType().requiresPrescription()) {
+        if (order == null) {
             return;
         }
+
+        // 1. Kiểm tra nếu đơn hàng có sản phẩm là kính thuốc (hoặc có gắn toa đo mắt prescription)
+        boolean hasPrescription = order.getPrescriptionId() != null;
+        boolean isPrescriptionOrder = order.getOrderType() != null && order.getOrderType().requiresPrescription();
+        boolean hasPrescriptionItem = order.getItems() != null && order.getItems().stream().anyMatch(i ->
+                i.getPrescriptionId() != null || isLensSku(i.getSkuId(), i.getProductName()));
+
+        if (!hasPrescription && !isPrescriptionOrder && !hasPrescriptionItem) {
+            log.debug("Đơn hàng {} không có sản phẩm kính thuốc hoặc toa kính, bỏ qua tạo lệnh mài", order.getOrderCode());
+            return;
+        }
+
         try {
             String frameSku = null;
             String frameName = null;
             String lensSku = null;
             String lensName = null;
-            for (OrderItem item : order.getItems()) {
-                String sku = item.getSkuId() == null ? "" : item.getSkuId().toUpperCase();
-                if (sku.startsWith("LNS-") || sku.startsWith("LZ-")) {
-                    lensSku = item.getSkuId();
-                    lensName = item.getProductName();
-                } else {
-                    frameSku = item.getSkuId();
-                    frameName = item.getProductName();
+            Long itemPrescriptionId = null;
+
+            if (order.getItems() != null) {
+                for (OrderItem item : order.getItems()) {
+                    if (isLensSku(item.getSkuId(), item.getProductName())) {
+                        lensSku = item.getSkuId();
+                        lensName = item.getProductName();
+                        if (item.getPrescriptionId() != null) {
+                            itemPrescriptionId = item.getPrescriptionId();
+                        }
+                    } else {
+                        frameSku = item.getSkuId();
+                        frameName = item.getProductName();
+                    }
                 }
             }
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("orderId", order.getId());
-            body.put("prescriptionId", order.getPrescriptionId());
-            body.put("frameSku", frameSku);
-            body.put("frameName", frameName);
-            body.put("lensSku", lensSku);
-            body.put("lensName", lensName);
-            body.put("technicianName", order.getStaffName());
-            labClient.createFromOrder(body);
-            log.info("Dispatched lab job for order {}", order.getOrderCode());
+
+            Long effectivePrescriptionId = order.getPrescriptionId() != null
+                    ? order.getPrescriptionId()
+                    : itemPrescriptionId;
+
+            // 2. Truy vấn thông số đo mắt từ Prescription nếu có
+            CreateLabJobRequest.PrescriptionDto prescriptionDto = null;
+            if (effectivePrescriptionId != null && labServiceClient != null) {
+                try {
+                    var rxRes = labServiceClient.getPrescriptionById(effectivePrescriptionId);
+                    if (rxRes != null && rxRes.getBody() != null) {
+                        Map<String, Object> body = rxRes.getBody();
+                        Object dataObj = body.get("data");
+                        if (dataObj instanceof Map<?, ?> dataMap) {
+                            prescriptionDto = parsePrescriptionDto(dataMap, effectivePrescriptionId);
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.warn("Không thể tải chi tiết toa kính ID {} từ lab-service: {}",
+                            effectivePrescriptionId, ex.getMessage());
+                }
+            }
+
+            // 3. Tự động build DTO CreateLabJobRequest
+            String trayNumber = "KHAY-" + (order.getOrderCode() != null ? order.getOrderCode() : order.getId());
+
+            CreateLabJobRequest labJobRequest = CreateLabJobRequest.builder()
+                    .orderId(order.getId())
+                    .orderCode(order.getOrderCode())
+                    .trayNumber(trayNumber)
+                    .customerName(order.getCustomerName())
+                    .prescriptionId(effectivePrescriptionId)
+                    .frameSku(frameSku)
+                    .frameName(frameName)
+                    .lensSku(lensSku)
+                    .lensName(lensName)
+                    .technicianName(order.getStaffName())
+                    .prescription(prescriptionDto)
+                    .build();
+
+            // 4. Gọi LabServiceClient.createLabJob(...)
+            if (labServiceClient != null) {
+                labServiceClient.createLabJob(labJobRequest);
+                log.info("Tự động sinh lệnh mài lens (Lab Job) thành công cho đơn POS: mã {}, khay {}",
+                        order.getOrderCode(), trayNumber);
+            } else if (labClient != null) {
+                // Fallback nếu LabServiceClient chưa được tiêm
+                Map<String, Object> fallbackBody = new LinkedHashMap<>();
+                fallbackBody.put("orderId", order.getId());
+                fallbackBody.put("prescriptionId", effectivePrescriptionId);
+                fallbackBody.put("frameSku", frameSku);
+                fallbackBody.put("frameName", frameName);
+                fallbackBody.put("lensSku", lensSku);
+                fallbackBody.put("lensName", lensName);
+                fallbackBody.put("technicianName", order.getStaffName());
+                labClient.createFromOrder(fallbackBody);
+                log.info("Dispatched lab job via fallback LabClient for order {}", order.getOrderCode());
+            }
         } catch (Exception ex) {
-            log.error("Could not create lab job for order {}: {}", order.getOrderCode(), ex.getMessage());
+            // Bọc trong try-catch để nếu lab-service gặp sự cố thì KHÔNG làm rollback transaction thanh toán POS
+            log.warn("Cảnh báo: Không thể tự động tạo lệnh mài kính cho đơn hàng {} do lỗi lab-service: {}",
+                    order.getOrderCode(), ex.getMessage());
+        }
+    }
+
+    private boolean isLensSku(String sku, String productName) {
+        String cleanSku = sku == null ? "" : sku.toUpperCase();
+        if (cleanSku.startsWith("LNS-") || cleanSku.startsWith("LZ-") || cleanSku.contains("LENS")) {
+            return true;
+        }
+        return productName != null && productName.toLowerCase().contains("tròng");
+    }
+
+    private CreateLabJobRequest.PrescriptionDto parsePrescriptionDto(Map<?, ?> map, Long rxId) {
+        return CreateLabJobRequest.PrescriptionDto.builder()
+                .id(rxId)
+                .odSphere(asBigDecimal(map.get("odSph") != null ? map.get("odSph") : map.get("odSphere")))
+                .odCyl(asBigDecimal(map.get("odCyl")))
+                .odAxis(asInteger(map.get("odAxis")))
+                .odAdd(asBigDecimal(map.get("odAdd")))
+                .osSphere(asBigDecimal(map.get("osSph") != null ? map.get("osSph") : map.get("osSphere")))
+                .osCyl(asBigDecimal(map.get("osCyl")))
+                .osAxis(asInteger(map.get("osAxis")))
+                .osAdd(asBigDecimal(map.get("osAdd")))
+                .pd(asBigDecimal(map.get("pd")))
+                .notes(map.get("notes") != null ? map.get("notes").toString() : null)
+                .build();
+    }
+
+    private BigDecimal asBigDecimal(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof BigDecimal bd) return bd;
+        if (obj instanceof Number num) return BigDecimal.valueOf(num.doubleValue());
+        try {
+            return new BigDecimal(obj.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Integer asInteger(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Integer i) return i;
+        if (obj instanceof Number num) return num.intValue();
+        try {
+            return Integer.valueOf(obj.toString());
+        } catch (Exception e) {
+            return null;
         }
     }
 
