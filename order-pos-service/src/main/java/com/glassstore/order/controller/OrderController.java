@@ -51,7 +51,28 @@ public class OrderController {
 
     /** Bare array to keep the existing portal contract working. */
     @GetMapping
-    public ResponseEntity<List<Order>> getAllOrders() {
+    public ResponseEntity<List<Order>> getAllOrders(
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "channel", required = false) String channel) {
+        if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
+            OrderStatus st = null;
+            try { st = OrderStatus.parse(status); } catch (Exception ignored) {}
+            SalesChannel ch = null;
+            if (channel != null && !channel.isBlank() && !"ALL".equalsIgnoreCase(channel)) {
+                try { ch = SalesChannel.parse(channel); } catch (Exception ignored) {}
+            }
+            if (st != null && ch != null) {
+                return ResponseEntity.ok(orderRepository.findByStatusAndChannelOrderByCreatedAtDesc(st, ch));
+            } else if (st != null) {
+                return ResponseEntity.ok(orderRepository.findByStatusOrderByCreatedAtDesc(st));
+            }
+        } else if (channel != null && !channel.isBlank() && !"ALL".equalsIgnoreCase(channel)) {
+            SalesChannel ch = null;
+            try { ch = SalesChannel.parse(channel); } catch (Exception ignored) {}
+            if (ch != null) {
+                return ResponseEntity.ok(orderRepository.findByChannelOrderByCreatedAtDesc(ch));
+            }
+        }
         return ResponseEntity.ok(orderRepository.findAllByOrderByCreatedAtDesc());
     }
 

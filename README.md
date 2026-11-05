@@ -12,6 +12,8 @@ Dự án Backend xây dựng trên nền tảng **Java 21 (LTS)**, **Spring Boot
   - **API Gateway:** Spring Cloud Gateway (Port 8080 - Single Entry Point, Netty Reactive)
   - **Inter-service Communication:** Spring Cloud OpenFeign (Declarative REST Client)
 - **Cơ sở dữ liệu:** MySQL 8.0 (Logical Database Isolation: 1 MySQL Server chứa 4 Schemas độc lập)
+
+Backend mặc định kết nối MySQL trên cổng `3306`. Nếu dùng MySQL Docker được publish ở `3307`, đặt biến môi trường `DB_PORT=3307` trước khi khởi động cả bốn service. Hai cổng có thể chứa hai bộ dữ liệu khác nhau; kiểm tra đúng server trước khi nhập dữ liệu hoặc chạy migration.
 - **ORM / Persistence:** Spring Data JPA & Hibernate
 - **Bảo mật & Xác thực:** Spring Security 6, JJWT (io.jsonwebtoken 0.11.5), BCrypt
 - **Email Service (Gửi OTP):** Spring Boot Starter Mail (Google SMTP)

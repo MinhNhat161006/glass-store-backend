@@ -198,6 +198,21 @@ class StockTransferIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    void movementEndpointBindsOptionalFiltersAndPagination() throws Exception {
+        var admin = jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        mockMvc.perform(get("/api/inventory/movements").with(admin))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/inventory/movements")
+                        .param("sku", "UNKNOWN-SKU").param("locationCode", "LAB")
+                        .param("referenceId", "UNKNOWN-TRANSFER").param("page", "0").param("size", "10")
+                        .with(admin))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.data.size").value(10));
+        mockMvc.perform(get("/api/inventory/movements").param("page", "-1").with(admin))
+                .andExpect(status().isBadRequest());
+    }
+
     private boolean receiveAfter(CountDownLatch start, Long transferId) throws Exception {
         start.await();
         try {
