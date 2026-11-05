@@ -249,90 +249,234 @@ public class OrderCheckoutService {
             return;
         }
 
-        try {
-            String frameSku = null;
-            String frameName = null;
-            String lensSku = null;
-            String lensName = null;
-            Long itemPrescriptionId = null;
+        dispatchLabJob(order);
+    }
 
-            if (order.getItems() != null) {
-                for (OrderItem item : order.getItems()) {
-                    if (isLensSku(item.getSkuId(), item.getProductName())) {
+    /**
+     * Dispatch lệnh gia công sang eyewear-lab-service với validation đầy đủ và retry exponential backoff.
+     */
+    @Transactional
+    public Order dispatchLabJob(Order order) {
+        if (order == null) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Đơn hàng không hợp lệ");
+        }
+
+        // 1. Kiểm tra đơn hàng phải có Order.status == PAID
+        if (order.currentStatus() != OrderStatus.PAID) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR,
+                    "Đơn hàng phải ở trạng thái PAID để gửi lệnh gia công sang Lab (trạng thái hiện tại: " + order.currentStatus() + ")");
+        }
+
+        // 2. Kiểm tra toa kính (Prescription): Tồn tại, đúng khách hàng của đơn, đủ thông số đo (SPH, CYL, AXIS, PD)
+        Long effectivePrescriptionId = order.getPrescriptionId();
+        if (effectivePrescriptionId == null && order.getItems() != null) {
+            effectivePrescriptionId = order.getItems().stream()
+                    .map(OrderItem::getPrescriptionId)
+                    .filter(java.util.Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (effectivePrescriptionId == null) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Đơn hàng kính thuốc thiếu toa kính (prescriptionId)");
+        }
+
+        Map<String, Object> rxMap = null;
+        if (labServiceClient != null) {
+            try {
+                var rxRes = labServiceClient.getPrescriptionById(effectivePrescriptionId);
+                if (rxRes != null && rxRes.getBody() != null) {
+                    Map<String, Object> body = rxRes.getBody();
+                    Object dataObj = body.get("data");
+                    if (dataObj instanceof Map<?, ?> dataMap) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> casted = (Map<String, Object>) dataMap;
+                        rxMap = casted;
+                    } else if (body.containsKey("odSph") || body.containsKey("odSphere")) {
+                        rxMap = body;
+                    }
+                }
+            } catch (ApiException ex) {
+                throw ex;
+            } catch (Exception ex) {
+                log.warn("Lỗi khi truy vấn toa kính ID {} từ lab-service: {}", effectivePrescriptionId, ex.getMessage());
+                throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Không tìm thấy toa kính với ID: " + effectivePrescriptionId);
+            }
+        }
+
+        if (rxMap == null) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Không tìm thấy thông tin toa kính với ID: " + effectivePrescriptionId);
+        }
+
+        // Đúng khách hàng của đơn hàng
+        Long rxCustomerId = asLong(rxMap.get("customerId"));
+        if (order.getCustomerId() != null && rxCustomerId != null && !order.getCustomerId().equals(rxCustomerId)) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR,
+                    "Toa kính (customerId=" + rxCustomerId + ") không đúng khách hàng của đơn hàng (customerId=" + order.getCustomerId() + ")");
+        }
+
+        // Đủ thông số đo (SPH, CYL, AXIS, PD)
+        BigDecimal odSph = asBigDecimal(rxMap.get("odSph") != null ? rxMap.get("odSph") : rxMap.get("odSphere"));
+        BigDecimal osSph = asBigDecimal(rxMap.get("osSph") != null ? rxMap.get("osSph") : rxMap.get("osSphere"));
+        BigDecimal odCyl = asBigDecimal(rxMap.get("odCyl"));
+        BigDecimal osCyl = asBigDecimal(rxMap.get("osCyl"));
+        Integer odAxis = asInteger(rxMap.get("odAxis"));
+        Integer osAxis = asInteger(rxMap.get("osAxis"));
+        BigDecimal pd = asBigDecimal(rxMap.get("pd"));
+
+        if (odSph == null || osSph == null || odCyl == null || osCyl == null || odAxis == null || osAxis == null || pd == null) {
+            throw ApiException.of(ErrorCode.VALIDATION_ERROR,
+                    "Toa kính thiếu thông số đo bắt buộc (SPH, CYL, AXIS, PD)");
+        }
+
+        CreateLabJobRequest.PrescriptionDto prescriptionDto = parsePrescriptionDto(rxMap, effectivePrescriptionId);
+
+        // 3. Chuẩn bị danh sách yêu cầu gia công (Contract & Idempotency: LAB_REQ_{orderId}_{orderItemId})
+        String frameSku = null;
+        String frameName = null;
+        String lensSku = null;
+        String lensName = null;
+
+        java.util.List<OrderItem> lensItems = new java.util.ArrayList<>();
+        if (order.getItems() != null) {
+            for (OrderItem item : order.getItems()) {
+                if (isLensSku(item.getSkuId(), item.getProductName()) || item.getPrescriptionId() != null) {
+                    lensItems.add(item);
+                    if (lensSku == null) {
                         lensSku = item.getSkuId();
                         lensName = item.getProductName();
-                        if (item.getPrescriptionId() != null) {
-                            itemPrescriptionId = item.getPrescriptionId();
-                        }
-                    } else {
-                        frameSku = item.getSkuId();
-                        frameName = item.getProductName();
                     }
+                } else if (frameSku == null) {
+                    frameSku = item.getSkuId();
+                    frameName = item.getProductName();
                 }
             }
+        }
 
-            Long effectivePrescriptionId = order.getPrescriptionId() != null
-                    ? order.getPrescriptionId()
-                    : itemPrescriptionId;
+        String trayNumber = "KHAY-" + (order.getOrderCode() != null ? order.getOrderCode() : order.getId());
 
-            // 2. Truy vấn thông số đo mắt từ Prescription nếu có
-            CreateLabJobRequest.PrescriptionDto prescriptionDto = null;
-            if (effectivePrescriptionId != null && labServiceClient != null) {
-                try {
-                    var rxRes = labServiceClient.getPrescriptionById(effectivePrescriptionId);
-                    if (rxRes != null && rxRes.getBody() != null) {
-                        Map<String, Object> body = rxRes.getBody();
-                        Object dataObj = body.get("data");
-                        if (dataObj instanceof Map<?, ?> dataMap) {
-                            prescriptionDto = parsePrescriptionDto(dataMap, effectivePrescriptionId);
-                        }
-                    }
-                } catch (Exception ex) {
-                    log.warn("Không thể tải chi tiết toa kính ID {} từ lab-service: {}",
-                            effectivePrescriptionId, ex.getMessage());
-                }
-            }
-
-            // 3. Tự động build DTO CreateLabJobRequest
-            String trayNumber = "KHAY-" + (order.getOrderCode() != null ? order.getOrderCode() : order.getId());
-
-            CreateLabJobRequest labJobRequest = CreateLabJobRequest.builder()
+        java.util.List<CreateLabJobRequest> requests = new java.util.ArrayList<>();
+        if (lensItems.isEmpty()) {
+            Long defaultItemId = 0L;
+            String defaultSku = lensSku != null ? lensSku : "LENS-DEFAULT";
+            requests.add(CreateLabJobRequest.builder()
                     .orderId(order.getId())
+                    .orderItemId(defaultItemId)
+                    .prescriptionId(effectivePrescriptionId)
+                    .sku(defaultSku)
+                    .idempotencyKey("LAB_REQ_" + order.getId() + "_" + defaultItemId)
                     .orderCode(order.getOrderCode())
                     .trayNumber(trayNumber)
+                    .customerId(order.getCustomerId())
                     .customerName(order.getCustomerName())
-                    .prescriptionId(effectivePrescriptionId)
                     .frameSku(frameSku)
                     .frameName(frameName)
-                    .lensSku(lensSku)
+                    .lensSku(defaultSku)
                     .lensName(lensName)
                     .technicianName(order.getStaffName())
                     .prescription(prescriptionDto)
-                    .build();
-
-            // 4. Gọi LabServiceClient.createLabJob(...)
-            if (labServiceClient != null) {
-                labServiceClient.createLabJob(labJobRequest);
-                log.info("Tự động sinh lệnh mài lens (Lab Job) thành công cho đơn POS: mã {}, khay {}",
-                        order.getOrderCode(), trayNumber);
-            } else if (labClient != null) {
-                // Fallback nếu LabServiceClient chưa được tiêm
-                Map<String, Object> fallbackBody = new LinkedHashMap<>();
-                fallbackBody.put("orderId", order.getId());
-                fallbackBody.put("prescriptionId", effectivePrescriptionId);
-                fallbackBody.put("frameSku", frameSku);
-                fallbackBody.put("frameName", frameName);
-                fallbackBody.put("lensSku", lensSku);
-                fallbackBody.put("lensName", lensName);
-                fallbackBody.put("technicianName", order.getStaffName());
-                labClient.createFromOrder(fallbackBody);
-                log.info("Dispatched lab job via fallback LabClient for order {}", order.getOrderCode());
+                    .odSphere(odSph)
+                    .odCyl(odCyl)
+                    .odAxis(odAxis)
+                    .osSphere(osSph)
+                    .osCyl(osCyl)
+                    .osAxis(osAxis)
+                    .pd(pd)
+                    .build());
+        } else {
+            for (OrderItem item : lensItems) {
+                Long itemId = item.getId() != null ? item.getId() : 0L;
+                requests.add(CreateLabJobRequest.builder()
+                        .orderId(order.getId())
+                        .orderItemId(itemId)
+                        .prescriptionId(effectivePrescriptionId)
+                        .sku(item.getSkuId())
+                        .idempotencyKey("LAB_REQ_" + order.getId() + "_" + itemId)
+                        .orderCode(order.getOrderCode())
+                        .trayNumber(trayNumber)
+                        .customerId(order.getCustomerId())
+                        .customerName(order.getCustomerName())
+                        .frameSku(frameSku)
+                        .frameName(frameName)
+                        .lensSku(item.getSkuId())
+                        .lensName(item.getProductName())
+                        .technicianName(order.getStaffName())
+                        .prescription(prescriptionDto)
+                        .odSphere(odSph)
+                        .odCyl(odCyl)
+                        .odAxis(odAxis)
+                        .osSphere(osSph)
+                        .osCyl(osCyl)
+                        .osAxis(osAxis)
+                        .pd(pd)
+                        .build());
             }
-        } catch (Exception ex) {
-            // Bọc trong try-catch để nếu lab-service gặp sự cố thì KHÔNG làm rollback transaction thanh toán POS
-            log.warn("Cảnh báo: Không thể tự động tạo lệnh mài kính cho đơn hàng {} do lỗi lab-service: {}",
-                    order.getOrderCode(), ex.getMessage());
         }
+
+        // 4. Gọi liên service: Thêm retry tối đa 3 lần với Exponential Backoff khi gọi sang Lab gặp lỗi mạng/timeout
+        int maxAttempts = 3;
+        long initialBackoffMs = 100L;
+        boolean allSuccess = true;
+        Exception lastException = null;
+
+        for (CreateLabJobRequest req : requests) {
+            boolean reqSuccess = false;
+            long backoff = initialBackoffMs;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    if (labServiceClient != null) {
+                        labServiceClient.createLabJob(req);
+                    } else if (labClient != null) {
+                        Map<String, Object> fallbackBody = new LinkedHashMap<>();
+                        fallbackBody.put("orderId", req.getOrderId());
+                        fallbackBody.put("prescriptionId", req.getPrescriptionId());
+                        fallbackBody.put("frameSku", req.getFrameSku());
+                        fallbackBody.put("frameName", req.getFrameName());
+                        fallbackBody.put("lensSku", req.getLensSku());
+                        fallbackBody.put("lensName", req.getLensName());
+                        fallbackBody.put("technicianName", req.getTechnicianName());
+                        labClient.createFromOrder(fallbackBody);
+                    }
+                    reqSuccess = true;
+                    log.info("Dispatch lab job thành công cho đơn {}, key: {} (lần thử {})",
+                            order.getOrderCode(), req.getIdempotencyKey(), attempt);
+                    break;
+                } catch (Exception ex) {
+                    lastException = ex;
+                    log.warn("Lần thử {}/{} gọi sang Lab thất bại cho đơn {}, key: {}: {}",
+                            attempt, maxAttempts, order.getOrderCode(), req.getIdempotencyKey(), ex.getMessage());
+                    if (attempt < maxAttempts) {
+                        try {
+                            Thread.sleep(backoff);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                        backoff *= 2; // Exponential Backoff: 100ms -> 200ms -> 400ms
+                    }
+                }
+            }
+            if (!reqSuccess) {
+                allSuccess = false;
+                break;
+            }
+        }
+
+        // Nếu thất bại sau 3 lần, cập nhật trạng thái đơn là LAB_DISPATCH_FAILED (không rollback thanh toán gốc)
+        if (!allSuccess) {
+            log.error("Dispatch sang Lab thất bại sau {} lần thử cho đơn {}. Cập nhật trạng thái LAB_DISPATCH_FAILED",
+                    maxAttempts, order.getOrderCode(), lastException);
+            try {
+                return orderStatusService.transition(order, OrderStatus.LAB_DISPATCH_FAILED, "SYSTEM",
+                        "Gửi lệnh gia công sang Lab thất bại sau " + maxAttempts + " lần thử: "
+                                + (lastException != null ? lastException.getMessage() : "Timeout/Network error"));
+            } catch (Exception ex) {
+                log.error("Không thể cập nhật trạng thái LAB_DISPATCH_FAILED cho đơn {}: {}",
+                        order.getOrderCode(), ex.getMessage());
+            }
+        }
+
+        return order;
     }
 
     private boolean isLensSku(String sku, String productName) {
@@ -346,6 +490,7 @@ public class OrderCheckoutService {
     private CreateLabJobRequest.PrescriptionDto parsePrescriptionDto(Map<?, ?> map, Long rxId) {
         return CreateLabJobRequest.PrescriptionDto.builder()
                 .id(rxId)
+                .customerId(asLong(map.get("customerId")))
                 .odSphere(asBigDecimal(map.get("odSph") != null ? map.get("odSph") : map.get("odSphere")))
                 .odCyl(asBigDecimal(map.get("odCyl")))
                 .odAxis(asInteger(map.get("odAxis")))
@@ -357,6 +502,17 @@ public class OrderCheckoutService {
                 .pd(asBigDecimal(map.get("pd")))
                 .notes(map.get("notes") != null ? map.get("notes").toString() : null)
                 .build();
+    }
+
+    private Long asLong(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Long l) return l;
+        if (obj instanceof Number num) return num.longValue();
+        try {
+            return Long.valueOf(obj.toString());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private BigDecimal asBigDecimal(Object obj) {
