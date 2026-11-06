@@ -111,6 +111,8 @@ The setup uses docker-compose.yml, container glassstore-dev-mysql and volume gla
 
 The new volume is separate from the historical glass_store_mysql_data volume on 3307. No old volume is deleted or migrated automatically. Docker init scripts execute only for a new empty volume. Stopping the applications does not stop MySQL.
 
+Docker database smoke test on 2026-11-06 passed: MySQL 8.0 became healthy, all three init scripts loaded the baseline counts below, a Windows MySQL client connected through the published TCP port, and records survived a container restart. The test used a separate container/volume and temporary port 13316 because native MySQL occupied 3306. This checks database bootstrap and persistence; it does not claim a full application UAT against Docker. Standard team configuration remains port 3306.
+
 ## 5. Canonical development dataset
 
 The new-machine setup runs these scripts in order:

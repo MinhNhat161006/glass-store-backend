@@ -2,6 +2,8 @@ server:
   port: ${LAB_PORT:8084}
 
 services:
+  identity-service:
+    url: ${IDENTITY_SERVICE_URL:http://127.0.0.1:${IDENTITY_PORT:8081}}
   order-pos-service:
     url: ${ORDER_POS_SERVICE_URL:http://127.0.0.1:${ORDER_PORT:8083}}
   catalog-service:
