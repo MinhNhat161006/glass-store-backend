@@ -1,6 +1,7 @@
 package com.glassstore.lab.controller;
 
 import com.glassstore.common.dto.ApiResponse;
+import com.glassstore.lab.client.CatalogLocationClient;
 import com.glassstore.lab.entity.EyeExamAppointment;
 import com.glassstore.lab.repository.EyeExamAppointmentRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import java.util.Map;
 public class EyeExamAppointmentController {
 
     private final EyeExamAppointmentRepository appointmentRepository;
+    private final CatalogLocationClient locationClient;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<EyeExamAppointment>>> getAllAppointments() {
@@ -39,9 +41,19 @@ public class EyeExamAppointmentController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/location/{locationCode}/exists")
+    public ResponseEntity<ApiResponse<Boolean>> hasAppointmentsForLocation(
+            @PathVariable String locationCode) {
+        return ResponseEntity.ok(ApiResponse.success("Kiểm tra tham chiếu lịch hẹn thành công",
+                appointmentRepository.existsByLocationCodeIgnoreCase(locationCode)));
+    }
+
     @PostMapping
     public ResponseEntity<ApiResponse<EyeExamAppointment>> createAppointment(@RequestBody EyeExamAppointment appointment) {
         appointment.setId(null);
+        if (appointment.getLocationCode() != null && !appointment.getLocationCode().isBlank()) {
+            appointment.setLocationCode(locationClient.requireActiveLocation(appointment.getLocationCode()));
+        }
         if (com.glassstore.common.security.CurrentActor.customer()) {
             appointment.setCustomerId(com.glassstore.common.security.CurrentActor.id());
             appointment.setStatus("WAITING"); appointment.setStatusLabel("Đang chờ");
