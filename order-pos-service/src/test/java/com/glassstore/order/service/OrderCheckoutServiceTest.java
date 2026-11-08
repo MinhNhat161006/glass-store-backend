@@ -122,7 +122,7 @@ class OrderCheckoutServiceTest {
     @Test
     @DisplayName("dispatchLabJobIfNeeded: Tự động gửi CreateLabJobRequest qua LabServiceClient khi đơn có kính thuốc")
     void dispatchLabJob_PrescriptionOrder_CallsFeignClient() {
-        Map<String, Object> rxData = Map.of(
+        Map<String, Object> rxData = new java.util.HashMap<>(Map.of(
                 "id", 55L,
                 "customerId", 10L,
                 "odSph", -2.00,
@@ -132,7 +132,8 @@ class OrderCheckoutServiceTest {
                 "odAxis", 90,
                 "osAxis", 90,
                 "pd", 63.0
-        );
+        ));
+        rxData.put("odAdd", 0); rxData.put("osAdd", 0); rxData.put("version", 0L);
         when(labServiceClient.getPrescriptionById(55L)).thenReturn(org.springframework.http.ResponseEntity.ok(Map.of("data", rxData)));
 
         List<OrderItem> items = new ArrayList<>();
@@ -170,7 +171,7 @@ class OrderCheckoutServiceTest {
     @Test
     @DisplayName("dispatchLabJobIfNeeded: Khi LabServiceClient gặp lỗi thì try-catch không ném lỗi ra ngoài")
     void dispatchLabJob_WhenFeignClientFails_DoesNotThrow() {
-        Map<String, Object> rxData = Map.of(
+        Map<String, Object> rxData = new java.util.HashMap<>(Map.of(
                 "id", 60L,
                 "customerId", 20L,
                 "odSph", -1.50,
@@ -180,7 +181,8 @@ class OrderCheckoutServiceTest {
                 "odAxis", 0,
                 "osAxis", 0,
                 "pd", 62.0
-        );
+        ));
+        rxData.put("odAdd", 0); rxData.put("osAdd", 0); rxData.put("version", 0L);
         when(labServiceClient.getPrescriptionById(60L)).thenReturn(org.springframework.http.ResponseEntity.ok(Map.of("data", rxData)));
 
         List<OrderItem> items = new ArrayList<>();

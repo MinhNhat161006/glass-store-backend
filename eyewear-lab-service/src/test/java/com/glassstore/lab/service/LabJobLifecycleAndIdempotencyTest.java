@@ -61,6 +61,7 @@ class LabJobLifecycleAndIdempotencyTest {
     @BeforeEach
     void setUp() {
         validPrescription = Prescription.builder()
+                .odAdd(BigDecimal.ZERO).osAdd(BigDecimal.ZERO)
                 .id(200L)
                 .customerId(50L)
                 .customerName("Đỗ Hoàng Long")

@@ -38,6 +38,9 @@ class PosBenefitsIntegrationTest {
     @MockBean WarrantyActivationService warrantyActivation;
     @BeforeEach void setup() throws Exception {
         when(data.actor(any(),anyBoolean())).thenReturn(new ObjectMapper().readTree("{\"id\":1,\"username\":\"qa\",\"roles\":[\"ROLE_ADMIN\"]}"));
+        when(data.requirePrescription(eq(7L),eq(10L),any())).thenReturn(new ObjectMapper().readTree("""
+                {"id":7,"version":0,"customerId":10,"odSph":-2,"odCyl":0,"odAxis":0,"odAdd":0,"osSph":-2,"osCyl":0,"osAxis":0,"osAdd":0,"pd":63}
+                """));
         when(data.catalogItems()).thenReturn(Map.of("TEST-SKU", new PosDataService.CatalogItem(new BigDecimal("1000000"), "Catalog lens", "LENS", true),
                 "FRAME-SKU", new PosDataService.CatalogItem(new BigDecimal("500000"), "Catalog frame", "FRAME", true)));
         Voucher v=new Voucher();v.setCode("QA10");v.setName("QA voucher");v.setType("PERCENT");v.setAmount(new BigDecimal("10"));v.setMinimumAmount(new BigDecimal("500000"));v.setMaximumDiscount(new BigDecimal("100000"));v.setUsageLimit(1);v.setExpiresAt(LocalDateTime.now().plusDays(1));vouchers.save(v);
@@ -97,6 +100,8 @@ class PosBenefitsIntegrationTest {
         Order readBack = orderRepository.findById(saved.getId()).orElseThrow();
         assertEquals(10L, readBack.getCustomerId());
         assertEquals(7L, readBack.getPrescriptionId());
+        assertEquals(0L, readBack.getPrescription().getVersion());
+        assertEquals("CLINICAL_REVISION", readBack.getPrescription().getSource());
         assertEquals(7L, readBack.getItems().get(0).getPrescriptionId());
     }
 

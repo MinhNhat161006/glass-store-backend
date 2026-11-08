@@ -66,6 +66,7 @@ class LabQcWorkflowAndReworkTest {
     @BeforeEach
     void setUp() {
         confirmedPrescription = Prescription.builder()
+                .odAdd(BigDecimal.ZERO).osAdd(BigDecimal.ZERO)
                 .id(200L)
                 .customerId(50L)
                 .customerName("Đỗ Hoàng Long")

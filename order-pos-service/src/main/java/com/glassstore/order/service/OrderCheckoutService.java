@@ -127,6 +127,17 @@ public class OrderCheckoutService {
                     .osSph(rx.getOsSph()).osCyl(rx.getOsCyl()).osAxis(rx.getOsAxis()).osAdd(rx.getOsAdd())
                     .pd(rx.getPd()).source("CUSTOMER_PROVIDED").customerConfirmedAt(LocalDateTime.now()).build());
         }
+        if (request.getPrescriptionId() != null) {
+            try {
+                var response = labServiceClient.getPrescriptionById(request.getPrescriptionId());
+                Object data = response == null || response.getBody() == null ? null : response.getBody().get("data");
+                @SuppressWarnings("unchecked") Map<String, Object> values = data instanceof Map<?, ?> ? (Map<String, Object>) data : null;
+                order.setPrescription(ClinicalPrescriptionSnapshot.from(values, request.getPrescriptionId(), order.getCustomerId()));
+            } catch (feign.FeignException error) {
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
+                        "Không xác minh được phiên bản toa kính; chưa tạo đơn.");
+            }
+        }
         for (OrderDtos.OrderItemSnapshot line : basket.getLines()) {
             order.getItems().add(OrderItem.builder()
                     .order(order)
@@ -267,8 +278,9 @@ public class OrderCheckoutService {
             throw ApiException.of(ErrorCode.VALIDATION_ERROR, "Đơn hàng kính thuốc thiếu toa kính (prescriptionId)");
         }
 
-        Map<String, Object> rxMap = null;
-        if (labServiceClient != null) {
+        Map<String, Object> rxMap = order.getPrescription() != null && "CLINICAL_REVISION".equals(order.getPrescription().getSource())
+                ? ClinicalPrescriptionSnapshot.toMap(order.getPrescription(), effectivePrescriptionId, order.getCustomerId()) : null;
+        if (rxMap == null && labServiceClient != null) {
             try {
                 var rxRes = labServiceClient.getPrescriptionById(effectivePrescriptionId);
                 if (rxRes != null && rxRes.getBody() != null) {
@@ -315,6 +327,11 @@ public class OrderCheckoutService {
                     "Toa kính thiếu thông số đo bắt buộc (SPH, CYL, AXIS, PD)");
         }
 
+        if (order.getPrescription() == null) {
+            order.setPrescription(ClinicalPrescriptionSnapshot.from(rxMap, effectivePrescriptionId, order.getCustomerId()));
+            orderRepository.save(order);
+        }
+
         CreateLabJobRequest.PrescriptionDto prescriptionDto = parsePrescriptionDto(rxMap, effectivePrescriptionId);
 
         // 3. Chuẩn bị danh sách yêu cầu gia công (Contract & Idempotency: LAB_REQ_{orderId}_{orderItemId})
@@ -349,6 +366,7 @@ public class OrderCheckoutService {
                     .orderId(order.getId())
                     .orderItemId(defaultItemId)
                     .prescriptionId(effectivePrescriptionId)
+                    .prescriptionVersion(order.getPrescription().getVersion())
                     .sku(defaultSku)
                     .idempotencyKey("LAB_REQ_" + order.getId() + "_" + defaultItemId)
                     .orderCode(order.getOrderCode())
@@ -376,6 +394,7 @@ public class OrderCheckoutService {
                         .orderId(order.getId())
                         .orderItemId(itemId)
                         .prescriptionId(effectivePrescriptionId)
+                    .prescriptionVersion(order.getPrescription().getVersion())
                         .sku(item.getSkuId())
                         .idempotencyKey("LAB_REQ_" + order.getId() + "_" + itemId)
                         .orderCode(order.getOrderCode())
@@ -416,6 +435,10 @@ public class OrderCheckoutService {
                         Map<String, Object> fallbackBody = new LinkedHashMap<>();
                         fallbackBody.put("orderId", req.getOrderId());
                         fallbackBody.put("prescriptionId", req.getPrescriptionId());
+                        fallbackBody.put("prescriptionVersion", req.getPrescriptionVersion());
+                        fallbackBody.put("orderItemId", req.getOrderItemId());
+                        fallbackBody.put("idempotencyKey", req.getIdempotencyKey());
+                        fallbackBody.put("customerId", req.getCustomerId());
                         fallbackBody.put("frameSku", req.getFrameSku());
                         fallbackBody.put("frameName", req.getFrameName());
                         fallbackBody.put("lensSku", req.getLensSku());

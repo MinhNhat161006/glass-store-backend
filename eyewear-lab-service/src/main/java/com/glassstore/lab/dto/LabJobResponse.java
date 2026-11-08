@@ -26,6 +26,7 @@ public class LabJobResponse {
     private String orderCode;
     private String trayNumber;
     private Long prescriptionId;
+    private Long prescriptionVersion;
     private String customerName;
     private String sku;
     private String lensSku;
@@ -74,6 +75,9 @@ public class LabJobResponse {
         if (job == null) {
             return null;
         }
+        // Existing callers may supply the current prescription. A pinned job always wins.
+        if (job.getPrescriptionSnapshot() != null)
+            rx = job.getPrescriptionSnapshot().asPrescription(job.getPrescriptionId(), job.getCustomerName());
 
         LabJobResponseBuilder builder = LabJobResponse.builder()
                 .id(job.getId())
@@ -83,6 +87,7 @@ public class LabJobResponse {
                 .orderCode(job.getOrderCode())
                 .trayNumber(job.getTrayNumber())
                 .prescriptionId(job.getPrescriptionId())
+                .prescriptionVersion(job.getPrescriptionSnapshot() == null ? null : job.getPrescriptionSnapshot().getVersion())
                 .customerName(job.getCustomerName())
                 .sku(job.getSku())
                 .lensSku(job.getLensSku())
