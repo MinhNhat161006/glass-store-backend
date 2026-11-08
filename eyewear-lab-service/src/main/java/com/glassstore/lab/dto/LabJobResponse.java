@@ -38,6 +38,9 @@ public class LabJobResponse {
     private String technicianName;
     private String technicianNotes;
     private String qcNotes;
+    private String qcResult;
+    private Integer reworkCount;
+    private Boolean materialDamaged;
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;
     private LocalDateTime createdAt;
@@ -92,6 +95,9 @@ public class LabJobResponse {
                 .technicianName(job.getTechnicianName())
                 .technicianNotes(job.getTechnicianNotes())
                 .qcNotes(job.getQcNotes())
+                .qcResult(job.getQcResult())
+                .reworkCount(job.getReworkCount() != null ? job.getReworkCount() : 0)
+                .materialDamaged(job.getMaterialDamaged() != null ? job.getMaterialDamaged() : false)
                 .startedAt(job.getStartedAt())
                 .completedAt(job.getCompletedAt())
                 .createdAt(job.getCreatedAt())
