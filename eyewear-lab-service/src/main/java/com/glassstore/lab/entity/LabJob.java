@@ -39,6 +39,9 @@ public class LabJob {
     @Column(name = "prescription_id")
     private Long prescriptionId;
 
+    @Embedded
+    private LabPrescriptionSnapshot prescriptionSnapshot;
+
     @Column(name = "customer_name")
     private String customerName;
 

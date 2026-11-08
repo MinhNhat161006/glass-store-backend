@@ -43,6 +43,7 @@ public class LabJobServiceImpl implements LabJobService {
     private final PrescriptionRepository prescriptionRepository;
     private final LabJobHistoryRepository historyRepository;
     private final LabQcHistoryRepository qcHistoryRepository;
+    private final com.glassstore.lab.service.PrescriptionService prescriptionService;
 
     @Override
     @Transactional(readOnly = true)
@@ -98,7 +99,9 @@ public class LabJobServiceImpl implements LabJobService {
         Long prescriptionId = requestedRxId;
         Prescription prescription = null;
         if (requestedRxId != null) {
-            prescription = prescriptionRepository.findById(requestedRxId)
+            prescription = request.getPrescriptionVersion() != null
+                    ? prescriptionService.readRevisionAsPrescription(requestedRxId, request.getPrescriptionVersion())
+                    : prescriptionRepository.findById(requestedRxId)
                     .orElseThrow(() -> ApiException.of(ErrorCode.VALIDATION_ERROR,
                             "Không tìm thấy toa kính với ID: " + requestedRxId));
         }
@@ -131,6 +134,7 @@ public class LabJobServiceImpl implements LabJobService {
                 .orderCode(request.getOrderCode())
                 .trayNumber(request.getEffectiveTrayNumber())
                 .prescriptionId(prescription != null ? prescription.getId() : prescriptionId)
+                .prescriptionSnapshot(com.glassstore.lab.entity.LabPrescriptionSnapshot.from(prescription))
                 .customerName(resolvedCustomerName)
                 .sku(sku)
                 .frameSku(request.getFrameSku())
@@ -508,6 +512,7 @@ public class LabJobServiceImpl implements LabJobService {
         if (prescription.getOdSph() == null || prescription.getOsSph() == null
                 || prescription.getOdCyl() == null || prescription.getOsCyl() == null
                 || prescription.getOdAxis() == null || prescription.getOsAxis() == null
+                || prescription.getOdAdd() == null || prescription.getOsAdd() == null
                 || prescription.getPd() == null) {
             throw ApiException.of(ErrorCode.VALIDATION_ERROR,
                     "Toa kính thiếu thông số đo bắt buộc (SPH, CYL, AXIS, PD)");
@@ -519,6 +524,8 @@ public class LabJobServiceImpl implements LabJobService {
         checkRange(prescription.getOdCyl(), -10, 10, "OD CYL");
         checkRange(prescription.getOsCyl(), -10, 10, "OS CYL");
         checkRange(prescription.getPd(), 40, 90, "PD");
+        checkRange(prescription.getOdAdd(), 0, 4, "OD ADD");
+        checkRange(prescription.getOsAdd(), 0, 4, "OS ADD");
     }
 
     private void validateAxis(Integer axis, String eye) {

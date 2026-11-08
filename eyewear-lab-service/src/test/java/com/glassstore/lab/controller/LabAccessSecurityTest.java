@@ -38,7 +38,9 @@ class LabAccessSecurityTest {
         jobHistory.deleteAll();jobs.deleteAll();warranties.deleteAll();appointments.deleteAll();prescriptions.deleteAll();
         mine=prescriptions.saveAndFlush(Prescription.builder().customerId(10L).customerName("QA own").optometristId(1L)
             .odSph(BigDecimal.ZERO).odCyl(BigDecimal.ZERO).odAxis(0)
-            .osSph(BigDecimal.ZERO).osCyl(BigDecimal.ZERO).osAxis(0).pd(new BigDecimal("63")).build());
+            .odAdd(BigDecimal.ZERO)
+            .osSph(BigDecimal.ZERO).osCyl(BigDecimal.ZERO).osAxis(0).osAdd(BigDecimal.ZERO)
+            .pd(new BigDecimal("63")).build());
         other=prescriptions.saveAndFlush(Prescription.builder().customerId(20L).customerName("QA other").optometristId(1L).odSph(BigDecimal.ZERO).osSph(BigDecimal.ZERO).pd(new BigDecimal("63")).build());
         otherAppointment=appointments.saveAndFlush(EyeExamAppointment.builder().ticketCode("QA-OTHER").customerId(20L).customerName("QA other").status("WAITING").locationCode("BRANCH_01").build());
         otherWarranty=warranties.saveAndFlush(Warranty.builder().warrantyCode("QA-WAR").customerId(20L).customerName("QA other").productName("QA frame").status("ACTIVE").build());
@@ -73,20 +75,22 @@ class LabAccessSecurityTest {
             .andExpect(status().isOk()).andExpect(jsonPath("$.data.optometristId").value(10));
     }
     @Test void bookingCannotUseAnotherCustomerIdOrOverwriteAnAppointment() throws Exception {
+        org.mockito.Mockito.when(customerClient.requireCustomer(10L)).thenReturn("QA verified");
         mvc.perform(post("/api/appointments").with(role("CUSTOMER")).contentType("application/json")
-            .content("{\"id\":"+otherAppointment.getId()+",\"customerId\":20,\"customerName\":\"QA\",\"status\":\"COMPLETED\"}"))
+            .content("{\"id\":"+otherAppointment.getId()+",\"customerId\":20,\"customerName\":\"QA\",\"status\":\"COMPLETED\",\"scheduledTime\":\"2099-11-09T09:00\"}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.data.customerId").value(10)).andExpect(jsonPath("$.data.status").value("WAITING"));
         org.junit.jupiter.api.Assertions.assertEquals(20L,appointments.findById(otherAppointment.getId()).orElseThrow().getCustomerId());
     }
     @Test void customerBookingPersistsActiveLocationAndScheduledDate() throws Exception {
+        org.mockito.Mockito.when(customerClient.requireCustomer(10L)).thenReturn("QA verified");
         org.mockito.Mockito.when(locationClient.requireActiveLocation("BRANCH_01")).thenReturn("BRANCH_01");
         mvc.perform(post("/api/appointments").with(role("CUSTOMER")).contentType("application/json")
-            .content("{\"customerName\":\"QA customer\",\"customerPhone\":\"0900000000\",\"locationCode\":\"BRANCH_01\",\"scheduledDate\":\"2026-11-09\",\"scheduledTime\":\"09:45 - 10:15\"}"))
+            .content("{\"customerPhone\":\"0900000000\",\"locationCode\":\"BRANCH_01\",\"scheduledTime\":\"2099-11-09T09:45\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.customerId").value(10))
             .andExpect(jsonPath("$.data.locationCode").value("BRANCH_01"))
-            .andExpect(jsonPath("$.data.scheduledDate").value("2026-11-09"))
-            .andExpect(jsonPath("$.data.scheduledTime").value("09:45 - 10:15"));
+            .andExpect(jsonPath("$.data.scheduledDate").value("2099-11-09"))
+            .andExpect(jsonPath("$.data.scheduledTime").value("2099-11-09T09:45"));
         org.mockito.Mockito.verify(locationClient).requireActiveLocation("BRANCH_01");
     }
     @Test void onlyInternalServiceCanCheckLocationAppointmentReferences() throws Exception {
