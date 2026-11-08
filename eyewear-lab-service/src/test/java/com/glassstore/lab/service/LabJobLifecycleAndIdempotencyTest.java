@@ -11,6 +11,7 @@ import com.glassstore.lab.entity.LabJobStatus;
 import com.glassstore.lab.entity.Prescription;
 import com.glassstore.lab.repository.LabJobHistoryRepository;
 import com.glassstore.lab.repository.LabJobRepository;
+import com.glassstore.lab.repository.LabQcHistoryRepository;
 import com.glassstore.lab.repository.PrescriptionRepository;
 import com.glassstore.lab.service.impl.LabJobServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +48,9 @@ class LabJobLifecycleAndIdempotencyTest {
 
     @Mock
     private LabJobHistoryRepository historyRepository;
+
+    @Mock
+    private LabQcHistoryRepository qcHistoryRepository;
 
     @InjectMocks
     private LabJobServiceImpl labJobService;
